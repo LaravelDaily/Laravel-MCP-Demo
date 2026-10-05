@@ -31,6 +31,17 @@ class Task extends Model
     use HasFactory;
 
     /**
+     * Mirror the database defaults so a newly created task exposes its
+     * status and priority without being refreshed.
+     *
+     * @var array<string, string>
+     */
+    protected $attributes = [
+        'status' => 'todo',
+        'priority' => 'medium',
+    ];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

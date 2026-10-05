@@ -48,6 +48,9 @@ test('creates tasks with todo status and medium priority by default', function (
         'title' => 'Write the handover notes',
     ]);
 
+    expect($task->status)->toBe(TaskStatus::Todo)
+        ->and($task->priority)->toBe(TaskPriority::Medium);
+
     expect($task->fresh()->status)->toBe(TaskStatus::Todo)
         ->and($task->fresh()->priority)->toBe(TaskPriority::Medium)
         ->and($task->fresh()->assignee_id)->toBeNull()

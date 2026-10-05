@@ -16,7 +16,7 @@ class TaskFactory extends Factory
 {
     /**
      * Define the model's default state. Status and priority are omitted so the
-     * database defaults (todo, medium) apply to created tasks.
+     * model defaults (todo, medium) apply to created tasks.
      *
      * @return array<string, mixed>
      */
