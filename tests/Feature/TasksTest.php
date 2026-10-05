@@ -14,6 +14,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Validation\ValidationException;
+use Livewire\Exceptions\PublicPropertyNotFoundException;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 
@@ -384,9 +385,15 @@ test('creates comments with the authenticated author', function () {
 
     $this->actingAs($author);
 
+    expect(fn () => Livewire::test(TaskShow::class, ['taskId' => $task->id])
+        ->update([['method' => 'addComment', 'params' => [], 'path' => '']], ['body' => 'Forged author', 'user_id' => $otherUser->id]))
+        ->toThrow(PublicPropertyNotFoundException::class);
+
+    $this->assertDatabaseCount('comments', 0);
+
     Livewire::test(TaskShow::class, ['taskId' => $task->id])
         ->set('body', '  Reproduced on staging  ')
-        ->call('addComment', ['user_id' => $otherUser->id])
+        ->call('addComment')
         ->assertHasNoErrors();
 
     $comment = Comment::query()->where('task_id', $task->id)->firstOrFail();
