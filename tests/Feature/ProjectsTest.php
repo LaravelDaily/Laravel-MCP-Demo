@@ -2,6 +2,7 @@
 
 use App\Enums\WorkspaceRole;
 use App\Livewire\Projects\Index as ProjectsIndex;
+use App\Livewire\Projects\Show as ProjectShow;
 use App\Models\Comment;
 use App\Models\Project;
 use App\Models\Task;
@@ -156,4 +157,30 @@ test('returns 404 for foreign project and task routes', function () {
     $this->get(route('projects.show', ['projectId' => $foreignProject->id + 1000]))->assertNotFound();
     $this->get(route('tasks.show', ['taskId' => $foreignTask->id]))->assertNotFound();
     $this->get(route('tasks.show', ['taskId' => $foreignTask->id + 1000]))->assertNotFound();
+});
+
+test('paginates projects and project tasks within the component', function () {
+    $owner = User::factory()->create();
+    $workspace = Workspace::factory()->withMember($owner, WorkspaceRole::Owner)->create();
+
+    Project::factory()->for($workspace)->count(11)
+        ->sequence(fn ($sequence) => ['name' => sprintf('Listed project %02d', $sequence->index + 1)])
+        ->create();
+    $project = Project::query()->where('name', 'Listed project 01')->firstOrFail();
+
+    Task::factory()->for($project)->count(11)
+        ->sequence(fn ($sequence) => ['title' => sprintf('Listed task %02d', $sequence->index + 1)])
+        ->create();
+
+    $this->actingAs($owner);
+
+    Livewire::test(ProjectsIndex::class)
+        ->call('nextPage')
+        ->assertSee('Listed project 11')
+        ->assertDontSee('Listed project 10');
+
+    Livewire::test(ProjectShow::class, ['projectId' => $project->id])
+        ->call('gotoPage', 2)
+        ->assertSee('Listed task 11')
+        ->assertDontSee('Listed task 10');
 });

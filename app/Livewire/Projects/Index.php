@@ -12,11 +12,12 @@ use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 #[Title('Projects')]
 class Index extends Component
 {
-    use ProjectValidationRules;
+    use ProjectValidationRules, WithPagination;
 
     public string $name = '';
 

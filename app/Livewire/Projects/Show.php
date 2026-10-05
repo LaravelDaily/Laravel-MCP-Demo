@@ -14,9 +14,12 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 class Show extends Component
 {
+    use WithPagination;
+
     /**
      * The project's route key. The record is re-resolved through the
      * workspace context on every request, so a foreign or stale ID is

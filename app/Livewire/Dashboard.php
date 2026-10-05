@@ -11,10 +11,13 @@ use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 #[Title('Dashboard')]
 class Dashboard extends Component
 {
+    use WithPagination;
+
     /**
      * Resolve the selected workspace, or null when the user has no
      * memberships.
