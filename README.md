@@ -72,9 +72,20 @@ Log in and open **Settings → MCP access** (`/settings/mcp-access`). Create a n
 
 The MCP endpoint is `https://teamboard.test/mcp/workspaces/{slug}`; demo slugs are `acme`, `sandbox`, and `globex`. Send `Authorization: Bearer <token>` on every request. Browser sessions are not accepted for MCP authentication. Identity comes from Sanctum, membership controls workspace access, and existing policies control operations; token abilities do not represent roles. The URL selects the workspace independently of the browser switcher. Invalid tokens receive 401; unknown or inaccessible workspace slugs receive 404.
 
-This checkpoint exposes **`list_tasks`** to owners, members, and viewers. Optional filters are `project_id`, `status` (`todo`, `in_progress`, `done`), `priority` (`low`, `medium`, `high`), `assignee_id`, and `search` (a trimmed, case-insensitive literal substring of title or description, up to 200 characters). Filters combine conjunctively and project/member IDs must belong to the endpoint workspace. Unsupported arguments and explicit null filters are rejected.
+The read surface is available to owners, members, and viewers. Each tool operates only in the URL-selected workspace:
 
-Results are ordered by ascending task ID. `page` defaults to 1, `per_page` defaults to 25 and accepts 1–100. The structured response contains `data` task summaries and `meta: { page, per_page, total, last_page }`; pages past the end return empty data. Each summary has only `id`, `title`, `project: { id, name }`, `status`, `priority`, nullable `assignee: { id, name }`, and nullable `due_date` (`YYYY-MM-DD`). A matching JSON text fallback is supplied for clients that need it.
+| Tool | Inputs beyond pagination | Result |
+| --- | --- | --- |
+| `list_tasks` | Optional `project_id`, `status`, `priority`, `assignee_id`, `search` | Filtered task summaries |
+| `list_projects` | Optional `search` in name/description | `id`, `name`, nullable `description`, `open_task_count` (todo plus in_progress) |
+| `list_my_tasks` | Optional `status`, `priority` | Tasks assigned to the authenticated user; includes completed tasks by default |
+| `get_task` | Required `task_id`; no pagination | Task summary, nullable `description`, latest 20 comments, `comments_total` |
+| `search_tasks` | Required `query`; optional `status`, `project_id` | Task summaries matching title or description |
+| `list_workspace_members` | Optional `search` in name only | `id`, `name`, workspace-specific `role`; no email or private fields |
+
+Search strings are trimmed, case-insensitive literal substrings of up to 200 characters. `%`, `_`, and `!` are treated literally. Comparisons apply the database’s `LOWER` function to both the column and bound pattern. Filters combine conjunctively and project/member IDs must belong to the endpoint workspace. Unsupported arguments are reported together; explicit null filters are rejected. No read tool accepts a caller-supplied actor or workspace.
+
+All lists are ordered by ascending ID. `page` defaults to 1, `per_page` defaults to 25 and accepts 1–100. The structured response contains `data` and `meta: { page, per_page, total, last_page }`; pages past the end return empty data. Each task summary has only `id`, `title`, `project: { id, name }`, `status` (`todo`, `in_progress`, `done`), `priority` (`low`, `medium`, `high`), nullable `assignee: { id, name }`, and nullable `due_date` (`YYYY-MM-DD`). `get_task` returns comments as `id`, `body`, and `author: { id, name }`, ordered by creation time descending and then ID descending. Every tool supplies a matching JSON text fallback alongside structured content. Reads do not change domain records.
 
 [Claude Code HTTP setup](https://code.claude.com/docs/en/mcp): from a terminal in this project, read the token without adding it to shell history (zsh):
 
@@ -88,11 +99,15 @@ export NODE_EXTRA_CA_CERTS="$HOME/Library/Application Support/Herd/config/valet/
 claude
 ```
 
-Run `/mcp` inside Claude Code and check the connection. Then try:
+Run `/mcp` inside Claude Code and check the connection. Try all six tools without changing data:
 
-- “Use teamboard-acme to list tasks with page 1 and per_page 2. Show the pagination metadata.”
-- “Use teamboard-acme to list high-priority tasks whose title or description contains pricing.”
-- “Call list_tasks with workspace_id 999 and show the validation error.”
+- “Use teamboard-acme list_projects to list projects and their open task counts.”
+- “Use teamboard-acme list_tasks with page 1 and per_page 2. Show pagination metadata, then fetch page 2.”
+- “Use teamboard-acme list_my_tasks to list my assignments, including completed tasks.”
+- “Use teamboard-acme search_tasks with query PRICING. Then filter to the Website Redesign project ID from list_projects.”
+- “Use teamboard-acme get_task with an ID returned by list_tasks. Show description, comments, and comments_total.”
+- “Use teamboard-acme list_workspace_members to find Bob by name and show his ID and role.”
+- “Call list_tasks with actor_id 999 and workspace_id 999 together and show both validation errors.”
 
 Expect only Acme data. Before revoking the token, test tenant denial by adding another local server named `teamboard-globex` with the same Alice token and URL ending `/globex`; it must fail with 404. Then revoke the token in Settings → MCP access, reconnect the Acme server in `/mcp`, and confirm authentication fails. The local scope keeps credentials out of a project `.mcp.json`; never commit tokens or client secrets.
 

@@ -20,6 +20,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
+ * @property-read Membership $membership Workspace membership when loaded through Workspace::members().
  * @property int $id
  * @property string $name
  * @property string $email

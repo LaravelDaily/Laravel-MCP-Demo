@@ -202,7 +202,7 @@ test('advertises read tool names schemas and safety metadata', function () {
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'], ['Authorization' => 'Bearer '.$token]);
 
     $response->assertOk()
-        ->assertJsonCount(1, 'result.tools')
+        ->assertJsonCount(6, 'result.tools')
         ->assertJsonPath('result.tools.0.name', 'list_tasks')
         ->assertJsonPath('result.tools.0.inputSchema.additionalProperties', false)
         ->assertJsonPath('result.tools.0.inputSchema.properties.page.minimum', 1)
