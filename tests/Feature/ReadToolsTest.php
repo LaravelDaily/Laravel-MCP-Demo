@@ -385,7 +385,7 @@ test('advertises the complete read surface with strict schemas and safety metada
     ], ['Authorization' => 'Bearer '.$token]);
 
     $response->assertOk()
-        ->assertJsonCount(6, 'result.tools')
+        ->assertJsonCount(8, 'result.tools')
         ->assertJsonPath('result.tools.'.$index.'.name', $name)
         ->assertJsonPath('result.tools.'.$index.'.inputSchema.additionalProperties', false)
         ->assertJsonPath('result.tools.'.$index.'.outputSchema.additionalProperties', false)
@@ -452,7 +452,7 @@ test('does not disclose unexpected read failures even in debug mode', function (
 
     $response = readToolAs($user, $workspace, ListTasksTool::class);
 
-    $response->assertHasErrors(['Unable to read workspace data. Please try again.'])
+    $response->assertHasErrors(['Unable to complete this workspace operation. Please try again.'])
         ->assertDontSee('Sensitive SQL and filesystem detail');
     Exceptions::assertReported(RuntimeException::class);
 });

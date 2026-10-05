@@ -87,6 +87,17 @@ Search strings are trimmed literal substrings of up to 200 characters. Search is
 
 All lists are ordered by ascending ID. `page` defaults to 1, `per_page` defaults to 25 and accepts 1–100. The structured response contains `data` and `meta: { page, per_page, total, last_page }`; pages past the end return empty data. Each task summary has only `id`, `title`, `project: { id, name }`, `status` (`todo`, `in_progress`, `done`), `priority` (`low`, `medium`, `high`), nullable `assignee: { id, name }`, and nullable `due_date` (`YYYY-MM-DD`). `get_task` returns comments as `id`, `body`, and `author: { id, name }`, ordered by creation time descending and then ID descending. Every tool supplies a matching JSON text fallback alongside structured content. Reads do not change domain records.
 
+Two metadata write tools are also available:
+
+| Tool | Inputs | Result |
+| --- | --- | --- |
+| `create_task` | Required `project_id`, `title`; optional nullable `description`, `assignee_id`, `due_date`; optional `priority` | Task summary plus description; defaults to `todo` and `medium` |
+| `update_task` | Required `task_id`; at least one of `title`, nullable `description`, `priority`, nullable `due_date` | Task summary plus description; omitted fields remain unchanged |
+
+Owners and members may write; viewer calls are denied by the shared policies and task actions. Discovery includes these tools for all workspace roles until role-specific registration is introduced in the permissions lesson. Supplied titles are trimmed and must be non-empty with at most 255 characters; descriptions accept up to 10,000 characters. Due dates use strict `YYYY-MM-DD`, including past dates. Creation may assign any member of the endpoint workspace, including a viewer, or leave the task unassigned. Explicit null clears description and due date on update; title and priority cannot be null. Update rejects status, assignee, and project changes. Both tools reject unsupported arguments and return safe workspace errors. Creation can duplicate on retry; neither tool promises idempotency or exactly-once execution. Safety annotations are advisory and do not guarantee a client confirmation dialog.
+
+To try metadata writes deliberately, ask Claude Code to create a test task in a project ID from `list_projects`, then update only its description or priority. Use `get_task` to verify the result and confirm omitted fields stayed unchanged. Delete the test task through the normal owner UI when finished.
+
 [Claude Code HTTP setup](https://code.claude.com/docs/en/mcp): from a terminal in this project, read the token without adding it to shell history (zsh):
 
 ```bash

@@ -2,68 +2,26 @@
 
 namespace App\Mcp\Tools;
 
-use App\Concerns\TaskValidationRules;
 use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
-use App\Models\Task;
-use App\Workspaces\WorkspaceContext;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
-use Laravel\Mcp\Server\Tool;
-use Throwable;
 
-abstract class ReadTool extends Tool
+abstract class ReadTool extends TeamBoardTool
 {
-    use TaskValidationRules;
-
-    public function __construct(protected WorkspaceContext $context) {}
-
-    final public function handle(Request $request): Response|ResponseFactory
+    final protected function execute(Request $request): ResponseFactory
     {
-        try {
-            Gate::authorize('view', $this->context->currentOrFail());
-
-            return $this->read($request);
-        } catch (ValidationException|AuthorizationException $exception) {
-            throw $exception;
-        } catch (ModelNotFoundException $exception) {
-            return Response::error('The record was not found in the current workspace.');
-        } catch (Throwable $exception) {
-            report($exception);
-
-            return Response::error('Unable to read workspace data. Please try again.');
-        }
+        return $this->read($request);
     }
 
     abstract protected function read(Request $request): ResponseFactory;
-
-    /**
-     * @param  array<string, mixed>  $rules
-     * @return array<string, mixed>
-     */
-    protected function validateArguments(Request $request, array $rules): array
-    {
-        $this->rejectUnsupportedFields($request->all(), array_keys($rules));
-
-        foreach (['search', 'query'] as $field) {
-            if (is_string($request->get($field))) {
-                $request->merge([$field => trim($request->get($field))]);
-            }
-        }
-
-        return $request->validate($rules, $this->taskValidationMessages());
-    }
 
     /** @return array<string, array<int, string>> */
     protected function paginationRules(): array
@@ -140,20 +98,6 @@ abstract class ReadTool extends Tool
         ]);
     }
 
-    /** @return array<string, mixed> */
-    protected function taskSummary(Task $task): array
-    {
-        return [
-            'id' => $task->id,
-            'title' => $task->title,
-            'project' => ['id' => $task->project->id, 'name' => $task->project->name],
-            'status' => $task->status->value,
-            'priority' => $task->priority->value,
-            'assignee' => $task->assignee === null ? null : ['id' => $task->assignee->id, 'name' => $task->assignee->name],
-            'due_date' => $task->due_date?->format('Y-m-d'),
-        ];
-    }
-
     /** @return array<string, Type> */
     protected function paginationSchema(JsonSchema $schema): array
     {
@@ -180,26 +124,6 @@ abstract class ReadTool extends Tool
     }
 
     /** @return array<string, Type> */
-    protected function taskSummarySchema(JsonSchema $schema): array
-    {
-        return [
-            'id' => $schema->integer()->required(),
-            'title' => $schema->string()->required(),
-            'project' => $schema->object($this->identitySchema($schema))->withoutAdditionalProperties()->required(),
-            'status' => $schema->string()->enum(array_column(TaskStatus::cases(), 'value'))->required(),
-            'priority' => $schema->string()->enum(array_column(TaskPriority::cases(), 'value'))->required(),
-            'assignee' => $schema->object($this->identitySchema($schema))->withoutAdditionalProperties()->nullable()->required(),
-            'due_date' => $schema->string()->format('date')->nullable()->required(),
-        ];
-    }
-
-    /** @return array<string, Type> */
-    protected function identitySchema(JsonSchema $schema): array
-    {
-        return ['id' => $schema->integer()->required(), 'name' => $schema->string()->required()];
-    }
-
-    /** @return array<string, Type> */
     protected function paginatedOutputSchema(JsonSchema $schema, Type $item): array
     {
         return [
@@ -217,15 +141,5 @@ abstract class ReadTool extends Tool
     public function outputSchema(JsonSchema $schema): array
     {
         return $this->paginatedOutputSchema($schema, $schema->object($this->taskSummarySchema($schema))->withoutAdditionalProperties());
-    }
-
-    /** @return array<string, mixed> */
-    public function toArray(): array
-    {
-        $tool = parent::toArray();
-        $tool['inputSchema']['additionalProperties'] = false;
-        $tool['outputSchema']['additionalProperties'] = false;
-
-        return $tool;
     }
 }
