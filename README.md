@@ -19,13 +19,13 @@ npm install
 npm run build
 ```
 
-Then serve the application with Herd, or run:
+The local demo uses `https://teamboard.test`. Set `APP_URL=https://teamboard.test` in `.env` and run `herd secure teamboard` yourself to enable trusted HTTPS. Students without Herd should substitute their own HTTPS URL. Then serve the application with Herd, or run:
 
 ```bash
 composer run dev
 ```
 
-The database defaults to `database/database.sqlite`. Seeding creates the demo workspaces and accounts below; run `php artisan migrate:fresh --seed` on a database you are willing to reset.
+The database defaults to `database/database.sqlite`. Seeding creates the demo workspaces and accounts below. For an existing local database, run `php artisan migrate`, then `php artisan db:seed` if demo data is missing. The demo seeder warns and does nothing when demo workspaces already exist; do not reset a database containing data you need.
 
 ## Demo accounts
 
@@ -65,3 +65,34 @@ php artisan test --compact
 vendor/bin/pint --dirty --format agent
 composer types:check
 ```
+
+## MCP connection
+
+Log in and open **Settings → MCP access** (`/settings/mcp-access`). Create a named personal access token and copy it immediately: plaintext is shown only on creation. Tokens do not expire; revoke them from this page when no longer needed. Stored hashes and other users' tokens are never displayed.
+
+The MCP endpoint is `https://teamboard.test/mcp/workspaces/{slug}`; demo slugs are `acme`, `sandbox`, and `globex`. Send `Authorization: Bearer <token>` on every request. Browser sessions are not accepted for MCP authentication. Identity comes from Sanctum, membership controls workspace access, and existing policies control operations; token abilities do not represent roles. The URL selects the workspace independently of the browser switcher. Invalid tokens receive 401; unknown or inaccessible workspace slugs receive 404.
+
+This checkpoint supports initialization; tools are introduced in the next commit.
+
+[Claude Code HTTP setup](https://code.claude.com/docs/en/mcp): from a terminal in this project, read the token without adding it to shell history (zsh):
+
+```bash
+read -rs 'TEAMBOARD_TOKEN?Paste your MCP token: '; echo
+claude mcp add --transport http --scope local teamboard-acme \
+  https://teamboard.test/mcp/workspaces/acme \
+  --header "Authorization: Bearer $TEAMBOARD_TOKEN"
+unset TEAMBOARD_TOKEN
+claude
+```
+
+Run `/mcp` inside Claude Code and check the connection. The local scope keeps credentials out of a project `.mcp.json`; never commit tokens or client secrets. Revoke your token after testing.
+
+For [Inspector CLI](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md), use the same endpoint and header:
+
+```bash
+npx -y @modelcontextprotocol/inspector --cli \
+  https://teamboard.test/mcp/workspaces/acme --transport http \
+  --method tools/list --header "Authorization: Bearer $TEAMBOARD_TOKEN"
+```
+
+For Node clients that do not trust Herd's local CA, export `NODE_EXTRA_CA_CERTS` with the path to Herd's CA certificate before starting the client. Keep TLS verification enabled. Automated transport tests do not substitute for a real client connection; manual verification is reported at each course checkpoint.
