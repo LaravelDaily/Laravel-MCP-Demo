@@ -104,23 +104,64 @@ test('scopes records to the selected workspace even with another valid membershi
         ->and($context->tasks()->pluck('title')->all())->toBe(['Globex Task']);
 });
 
+test('uses an explicit workspace instead of the session selection', function () {
+    $user = User::factory()->create();
+
+    $selected = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
+    $explicit = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
+    Project::factory()->for($selected)->create(['name' => 'Selected Project']);
+    Project::factory()->for($explicit)->create(['name' => 'Explicit Project']);
+
+    $this->actingAs($user);
+    session([WorkspaceContext::SESSION_KEY => $selected->id]);
+
+    $context = app(WorkspaceContext::class);
+    $context->setExplicitWorkspace($explicit);
+
+    expect($context->current()->id)->toBe($explicit->id)
+        ->and($context->projects()->pluck('name')->all())->toBe(['Explicit Project'])
+        ->and(session(WorkspaceContext::SESSION_KEY))->toBe($selected->id);
+});
+
+test('rejects an explicit workspace the user does not belong to', function () {
+    $user = User::factory()->create();
+
+    $own = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create();
+    $foreign = Workspace::factory()->withMember(User::factory()->create(), WorkspaceRole::Owner)->create();
+
+    $this->actingAs($user);
+    $context = app(WorkspaceContext::class);
+
+    expect(fn () => $context->setExplicitWorkspace($foreign))->toThrow(AuthorizationException::class)
+        ->and($context->current()->id)->toBe($own->id);
+});
+
 test('does not carry workspace context into another request', function () {
     Route::get('/_context/workspace', function () {
         return ['workspace' => app(WorkspaceContext::class)->current()?->slug];
     });
 
+    Route::get('/_context/explicit/{slug}', function (string $slug) {
+        $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+
+        return ['workspace' => app(WorkspaceContext::class)->setExplicitWorkspace($workspace)->slug];
+    });
+
     $alice = User::factory()->create();
     Workspace::factory()->withMember($alice, WorkspaceRole::Owner)->create(['slug' => 'acme']);
+    Workspace::factory()->withMember($alice, WorkspaceRole::Viewer)->create(['slug' => 'sandbox']);
 
     $eve = User::factory()->create();
     Workspace::factory()->withMember($eve, WorkspaceRole::Owner)->create(['slug' => 'globex']);
 
     $this->actingAs($alice);
-    $first = $this->get('/_context/workspace')->json('workspace');
+    $explicit = $this->get('/_context/explicit/sandbox')->json('workspace');
+    $afterExplicit = $this->get('/_context/workspace')->json('workspace');
 
     $this->actingAs($eve);
-    $second = $this->get('/_context/workspace')->json('workspace');
+    $otherUser = $this->get('/_context/workspace')->json('workspace');
 
-    expect($first)->toBe('acme')
-        ->and($second)->toBe('globex');
+    expect($explicit)->toBe('sandbox')
+        ->and($afterExplicit)->toBe('acme')
+        ->and($otherUser)->toBe('globex');
 });

@@ -10,7 +10,6 @@ use App\Models\Workspace;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
-use Illuminate\Support\Facades\Context;
 use RuntimeException;
 
 class WorkspaceContext
@@ -21,10 +20,11 @@ class WorkspaceContext
     public const string SESSION_KEY = 'workspace_id';
 
     /**
-     * Context key holding an explicitly set workspace for the current
-     * request lifecycle, used by request adapters such as MCP endpoints.
+     * Request attribute holding a workspace set explicitly by an adapter such
+     * as the MCP endpoint. Request attributes are discarded with the request,
+     * so the selection never reaches another request or a queued job.
      */
-    public const string EXPLICIT_CONTEXT_KEY = 'explicit_workspace_id';
+    public const string EXPLICIT_WORKSPACE_ATTRIBUTE = 'teamboard.explicit_workspace';
 
     /**
      * Resolve the current workspace for the authenticated user. An explicit
@@ -40,10 +40,10 @@ class WorkspaceContext
             return null;
         }
 
-        $explicitId = Context::getHidden(self::EXPLICIT_CONTEXT_KEY);
+        $explicitWorkspace = request()->attributes->get(self::EXPLICIT_WORKSPACE_ATTRIBUTE);
 
-        if ($explicitId !== null) {
-            return Workspace::query()->findOrFail((int) $explicitId);
+        if ($explicitWorkspace instanceof Workspace) {
+            return $explicitWorkspace;
         }
 
         $selectedId = session(self::SESSION_KEY);
@@ -137,7 +137,7 @@ class WorkspaceContext
             throw new AuthorizationException('You do not belong to the selected workspace.');
         }
 
-        Context::addHidden(self::EXPLICIT_CONTEXT_KEY, $workspace->id);
+        request()->attributes->set(self::EXPLICIT_WORKSPACE_ATTRIBUTE, $workspace);
 
         return $workspace;
     }
