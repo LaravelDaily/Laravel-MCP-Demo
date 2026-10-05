@@ -19,6 +19,8 @@ test('creates a named MCP token for the authenticated user', function () {
     preg_match('/\d+\|[a-zA-Z0-9]+/', $component->html(), $matches);
     expect($matches)->toHaveCount(1);
     $plaintext = $matches[0];
+    preg_match('/<textarea\b[^>]*>(.*?)<\/textarea>/s', $component->html(), $textarea);
+    expect(trim(html_entity_decode($textarea[1], ENT_QUOTES)))->toBe($plaintext);
     $token = $user->tokens()->sole();
     expect($token->name)->toBe('Claude Code');
     expect($token->token)->toBe(hash('sha256', explode('|', $plaintext, 2)[1]));

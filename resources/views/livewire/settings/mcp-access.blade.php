@@ -13,7 +13,7 @@
             <flux:callout class="my-6">
                 <flux:callout.heading>{{ __('Copy your token now') }}</flux:callout.heading>
                 <flux:callout.text>{{ __('This token is shown only on creation. Store it securely.') }}</flux:callout.text>
-                <flux:textarea readonly :label="__('New token')" :value="$plainTextToken" />
+                <flux:textarea readonly :label="__('New token')">{{ $plainTextToken }}</flux:textarea>
             </flux:callout>
         @endif
 
