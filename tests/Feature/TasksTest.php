@@ -156,37 +156,48 @@ test('allows task deletion only for owners', function () {
     $this->assertModelExists($otherTask);
 });
 
-test('rejects task creation and editing with invalid values', function (string $field, mixed $value) {
+test('rejects task creation and editing with invalid values', function (string $field, mixed $value, string $validField, string $validValue) {
     $owner = User::factory()->create();
     $workspace = workspaceWithMember($owner, WorkspaceRole::Owner);
     $project = Project::factory()->for($workspace)->create();
     $task = Task::factory()->for($project)->create([
         'title' => 'Original title',
+        'description' => 'Original description',
         'priority' => TaskPriority::Medium,
+        'due_date' => '2026-10-20',
     ]);
 
     $this->actingAs($owner);
 
     Livewire::test(ProjectShow::class, ['projectId' => $project->id])
+        ->set('title', 'Valid title')
         ->set($field, $value)
         ->call('createTask')
-        ->assertHasErrors($field);
+        ->assertHasErrors($field)
+        ->assertHasNoErrors(array_values(array_diff(['title', 'description', 'priority', 'due_date'], [$field])));
 
     $this->assertDatabaseCount('tasks', 1);
 
     Livewire::test(TaskShow::class, ['taskId' => $task->id])
+        ->call('startEditing')
+        ->set($validField, $validValue)
         ->set($field, $value)
         ->call('saveDetails')
-        ->assertHasErrors($field);
+        ->assertHasErrors($field)
+        ->assertHasNoErrors(array_values(array_diff(['title', 'description', 'priority', 'due_date'], [$field])));
 
-    expect($task->fresh()->title)->toBe('Original title')
-        ->and($task->fresh()->priority)->toBe(TaskPriority::Medium);
+    $task->refresh();
+
+    expect($task->title)->toBe('Original title')
+        ->and($task->description)->toBe('Original description')
+        ->and($task->priority)->toBe(TaskPriority::Medium)
+        ->and($task->due_date?->format('Y-m-d'))->toBe('2026-10-20');
 })->with([
-    'blank title' => ['title', '   '],
-    'oversized title' => ['title', str_repeat('a', 256)],
-    'invalid priority' => ['priority', 'urgent'],
-    'invalid due date' => ['due_date', '15-11-2026'],
-    'oversized description' => ['description', str_repeat('a', 10001)],
+    'blank title' => ['title', '   ', 'description', 'Changed description'],
+    'oversized title' => ['title', str_repeat('a', 256), 'priority', 'high'],
+    'invalid priority' => ['priority', 'urgent', 'title', 'Changed title'],
+    'invalid due date' => ['due_date', '15-11-2026', 'title', 'Changed title'],
+    'oversized description' => ['description', str_repeat('a', 10001), 'due_date', '2027-01-01'],
 ]);
 
 test('rejects non-string task titles with a validation error', function () {
