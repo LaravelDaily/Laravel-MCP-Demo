@@ -37,21 +37,32 @@ test('uses the selected workspace from the session', function () {
 });
 
 test('falls back when the selected membership has been removed', function () {
+    Route::get('/_context/projects', function () {
+        $context = app(WorkspaceContext::class);
+
+        return [
+            'workspace' => $context->current()?->slug,
+            'projects' => $context->projects()->pluck('name')->all(),
+        ];
+    });
+
     $user = User::factory()->create();
 
-    $remaining = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create();
-    $foreign = Workspace::factory()->create();
-    Project::factory()->for($foreign)->create(['name' => 'Foreign Secret Project']);
+    $remaining = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create(['slug' => 'remaining']);
+    $removed = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create(['slug' => 'removed']);
+    Project::factory()->for($remaining)->create(['name' => 'Remaining Project']);
+    Project::factory()->for($removed)->create(['name' => 'Removed Workspace Project']);
 
     $this->actingAs($user);
-    session([WorkspaceContext::SESSION_KEY => $foreign->id]);
+    session([WorkspaceContext::SESSION_KEY => $removed->id]);
+    $beforeRemoval = $this->get('/_context/projects')->json();
 
-    $context = app(WorkspaceContext::class);
-    $current = $context->current();
+    $removed->members()->detach($user);
+    $afterRemoval = $this->get('/_context/projects')->json();
 
-    expect($current->id)->toBe($remaining->id)
-        ->and(session(WorkspaceContext::SESSION_KEY))->toBe($remaining->id)
-        ->and($context->projects()->pluck('name'))->not->toContain('Foreign Secret Project');
+    expect($beforeRemoval)->toBe(['workspace' => 'removed', 'projects' => ['Removed Workspace Project']])
+        ->and($afterRemoval)->toBe(['workspace' => 'remaining', 'projects' => ['Remaining Project']])
+        ->and(session(WorkspaceContext::SESSION_KEY))->toBe($remaining->id);
 });
 
 test('has no current workspace when the user has no memberships', function () {
