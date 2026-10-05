@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Workspaces\WorkspaceContext;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
 test('selects the first membership when no workspace is selected', function () {
@@ -102,6 +103,21 @@ test('scopes records to the selected workspace even with another valid membershi
 
     expect($context->projects()->pluck('name')->all())->toBe(['Globex Project'])
         ->and($context->tasks()->pluck('title')->all())->toBe(['Globex Task']);
+});
+
+test('resolves the current workspace once per request', function () {
+    $user = User::factory()->create();
+    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
+
+    $this->actingAs($user);
+    $context = app(WorkspaceContext::class);
+    $context->current();
+
+    DB::enableQueryLog();
+    $repeated = app(WorkspaceContext::class)->current();
+
+    expect($repeated->id)->toBe($workspace->id)
+        ->and(DB::getQueryLog())->toBeEmpty();
 });
 
 test('uses an explicit workspace instead of the session selection', function () {

@@ -27,6 +27,12 @@ class WorkspaceContext
     public const string EXPLICIT_WORKSPACE_ATTRIBUTE = 'teamboard.explicit_workspace';
 
     /**
+     * Request attribute caching the session-based resolution for the rest of
+     * the request, keyed by user so a change of identity resolves again.
+     */
+    public const string RESOLVED_WORKSPACE_ATTRIBUTE = 'teamboard.resolved_workspace';
+
+    /**
      * Resolve the current workspace for the authenticated user. An explicit
      * workspace set for this request takes precedence over the session
      * selection; a stale session selection is cleared and replaced by the
@@ -46,6 +52,21 @@ class WorkspaceContext
             return $explicitWorkspace;
         }
 
+        $resolved = request()->attributes->get(self::RESOLVED_WORKSPACE_ATTRIBUTE);
+
+        if (is_array($resolved) && $resolved['user_id'] === $user->id) {
+            return $resolved['workspace'];
+        }
+
+        return $this->remember($user, $this->resolveFromSession($user));
+    }
+
+    /**
+     * Resolve the browser's selected workspace, replacing a stale selection
+     * with the user's first membership.
+     */
+    protected function resolveFromSession(User $user): ?Workspace
+    {
         $selectedId = session(self::SESSION_KEY);
 
         if ($selectedId !== null) {
@@ -119,6 +140,20 @@ class WorkspaceContext
         }
 
         session([self::SESSION_KEY => $workspace->id]);
+        $this->remember($user, $workspace);
+
+        return $workspace;
+    }
+
+    /**
+     * Cache the resolved workspace for the rest of the request.
+     */
+    protected function remember(User $user, ?Workspace $workspace): ?Workspace
+    {
+        request()->attributes->set(self::RESOLVED_WORKSPACE_ATTRIBUTE, [
+            'user_id' => $user->id,
+            'workspace' => $workspace,
+        ]);
 
         return $workspace;
     }
