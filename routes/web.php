@@ -13,9 +13,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::livewire('projects', ProjectsIndex::class)->name('projects.index');
 
-    Route::livewire('projects/{projectId}', ProjectShow::class)->name('projects.show');
+    Route::livewire('projects/{projectId}', ProjectShow::class)->whereNumber('projectId')->name('projects.show');
 
-    Route::livewire('tasks/{taskId}', TaskShow::class)->name('tasks.show');
+    Route::livewire('tasks/{taskId}', TaskShow::class)->whereNumber('taskId')->name('tasks.show');
 });
 
 require __DIR__.'/settings.php';

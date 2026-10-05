@@ -157,6 +157,8 @@ test('returns 404 for foreign project and task routes', function () {
     $this->get(route('projects.show', ['projectId' => $foreignProject->id + 1000]))->assertNotFound();
     $this->get(route('tasks.show', ['taskId' => $foreignTask->id]))->assertNotFound();
     $this->get(route('tasks.show', ['taskId' => $foreignTask->id + 1000]))->assertNotFound();
+    $this->get('/projects/not-a-number')->assertNotFound();
+    $this->get('/tasks/not-a-number')->assertNotFound();
 });
 
 test('paginates projects and project tasks within the component', function () {
