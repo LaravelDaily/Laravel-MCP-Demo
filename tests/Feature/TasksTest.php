@@ -89,6 +89,7 @@ test('forbids viewer task mutations and comments', function () {
 
     Livewire::test(TaskShow::class, ['taskId' => $task->id])
         ->set('title', 'Forged rename')
+        ->set('priority', 'high')
         ->call('saveDetails')
         ->assertForbidden();
 
@@ -111,9 +112,12 @@ test('forbids viewer task mutations and comments', function () {
         ->call('delete')
         ->assertForbidden();
 
-    expect($task->fresh()->title)->toBe('Unchanged')
-        ->and($task->fresh()->status)->toBe(TaskStatus::Todo)
-        ->and($task->fresh()->assignee_id)->toBeNull();
+    $task->refresh();
+
+    expect($task->title)->toBe('Unchanged')
+        ->and($task->status)->toBe(TaskStatus::Todo)
+        ->and($task->priority)->toBe(TaskPriority::Medium)
+        ->and($task->assignee_id)->toBeNull();
 
     $this->assertDatabaseCount('tasks', 1);
     $this->assertDatabaseCount('comments', 0);
