@@ -45,7 +45,7 @@ class McpAccess extends Component
     {
         return view('livewire.settings.mcp-access', [
             'plainTextToken' => $this->plainTextToken,
-            'tokens' => $this->user()->tokens()->orderBy('id')->get(['id', 'name', 'created_at']),
+            'tokens' => $this->user()->tokens()->orderBy('id')->get(['id', 'name', 'created_at', 'last_used_at']),
         ]);
     }
 }

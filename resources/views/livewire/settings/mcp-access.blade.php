@@ -20,7 +20,11 @@
         <div class="space-y-4">
             @forelse ($tokens as $token)
                 <div wire:key="token-{{ $token->id }}" class="flex items-center justify-between gap-4">
-                    <flux:text>{{ $token->name }}</flux:text>
+                    <div>
+                        <flux:text>{{ $token->name }}</flux:text>
+                        <flux:text size="sm">{{ __('Created') }}: {{ $token->created_at->format('Y-m-d H:i') }} UTC</flux:text>
+                        <flux:text size="sm">{{ __('Last used') }}: {{ $token->last_used_at ? $token->last_used_at->format('Y-m-d H:i').' UTC' : __('Never') }}</flux:text>
+                    </div>
                     <flux:button wire:click="revokeToken({{ $token->id }})" wire:confirm="{{ __('Revoke this token?') }}">{{ __('Revoke') }}</flux:button>
                 </div>
             @empty

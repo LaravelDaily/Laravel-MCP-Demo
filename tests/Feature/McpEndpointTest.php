@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\WorkspaceRole;
+use App\Models\Project;
+use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Workspaces\WorkspaceContext;
@@ -15,61 +17,97 @@ function mcpInitialize(): array
     ]];
 }
 
-test('returns 401 for missing invalid and revoked MCP bearer tokens', function (string $kind) {
+function mcpListTasks(): array
+{
+    return ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => [
+        'name' => 'list_tasks',
+        'arguments' => (object) [],
+    ]];
+}
+
+test('returns 401 for missing invalid and revoked MCP bearer tokens', function (Closure $headers) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('revoked');
+    $token = $user->createToken('Revoked transport test token');
     $token->accessToken->delete();
-    $headers = match ($kind) {
-        'missing' => [],
-        'invalid' => ['Authorization' => 'Bearer invalid'],
-        'revoked' => ['Authorization' => 'Bearer '.$token->plainTextToken],
-    };
 
-    $this->postJson('/mcp/workspaces/'.$workspace->slug, mcpInitialize(), $headers)
-        ->assertUnauthorized()->assertJsonMissingPath('result');
-})->with(['missing', 'invalid', 'revoked']);
+    $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, mcpInitialize(), $headers($token->plainTextToken));
+
+    $response->assertUnauthorized()
+        ->assertJsonMissingPath('result');
+})->with([
+    'missing' => [fn (string $token): array => []],
+    'invalid' => [fn (string $token): array => ['Authorization' => 'Bearer invalid']],
+    'revoked' => [fn (string $token): array => ['Authorization' => 'Bearer '.$token]],
+]);
 
 test('authenticates a real Sanctum token at the MCP endpoint', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('client')->plainTextToken;
+    $task = Task::factory()->for(Project::factory()->for($workspace))->create(['title' => 'Bearer identity permitted task']);
+    Task::factory()->create(['title' => 'Bearer identity foreign task']);
+    $token = $user->createToken('Transport client')->plainTextToken;
 
-    $this->postJson('/mcp/workspaces/'.$workspace->slug, mcpInitialize(), ['Authorization' => 'Bearer '.$token])
-        ->assertOk()->assertJsonPath('result.serverInfo.name', 'TeamBoard');
+    $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, mcpListTasks(), ['Authorization' => 'Bearer '.$token]);
+
+    $response->assertOk()
+        ->assertJsonPath('result.isError', false)
+        ->assertJsonCount(1, 'result.structuredContent.data')
+        ->assertJsonPath('result.structuredContent.data.0.id', $task->id)
+        ->assertDontSee('Bearer identity foreign task');
 });
 
-test('returns 404 for unknown and inaccessible MCP workspace slugs', function (string $kind) {
+test('returns 404 for unknown and inaccessible MCP workspace slugs', function (Closure $slug) {
     $user = User::factory()->create();
     $foreign = Workspace::factory()->create(['name' => 'Secret workspace']);
-    $token = $user->createToken('client')->plainTextToken;
+    $token = $user->createToken('Transport client')->plainTextToken;
 
-    $this->postJson('/mcp/workspaces/'.($kind === 'unknown' ? 'unknown' : $foreign->slug), mcpInitialize(), ['Authorization' => 'Bearer '.$token])
-        ->assertNotFound()->assertDontSee('Secret workspace');
-})->with(['unknown', 'inaccessible']);
+    $response = $this->postJson('/mcp/workspaces/'.$slug($foreign), mcpInitialize(), ['Authorization' => 'Bearer '.$token]);
+
+    $response->assertNotFound()
+        ->assertDontSee('Secret workspace');
+})->with([
+    'unknown' => [fn (Workspace $foreign): string => 'unknown'],
+    'inaccessible' => [fn (Workspace $foreign): string => $foreign->slug],
+]);
 
 test('uses the MCP workspace URL instead of the browser session', function () {
     $user = User::factory()->create();
     $first = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $second = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
-    $token = $user->createToken('client')->plainTextToken;
+    $firstTask = Task::factory()->for(Project::factory()->for($first))->create(['title' => 'First workspace task']);
+    $secondTask = Task::factory()->for(Project::factory()->for($second))->create(['title' => 'Second workspace task']);
+    $token = $user->createToken('Multi-workspace transport client')->plainTextToken;
 
-    $this->withSession([WorkspaceContext::SESSION_KEY => $first->id])
-        ->postJson('/mcp/workspaces/'.$second->slug, mcpInitialize(), ['Authorization' => 'Bearer '.$token])->assertOk();
-    expect(app(WorkspaceContext::class)->currentOrFail()->id)->toBe($second->id);
+    $response = $this->withSession([WorkspaceContext::SESSION_KEY => $first->id])
+        ->postJson('/mcp/workspaces/'.$second->slug, mcpListTasks(), ['Authorization' => 'Bearer '.$token]);
+
+    $response->assertOk()
+        ->assertJsonCount(1, 'result.structuredContent.data')
+        ->assertJsonPath('result.structuredContent.data.0.id', $secondTask->id)
+        ->assertDontSee('First workspace task');
 
     Auth::forgetGuards();
-    $this->postJson('/mcp/workspaces/'.$first->slug, mcpInitialize(), ['Authorization' => 'Bearer '.$token])->assertOk();
-    expect(app(WorkspaceContext::class)->currentOrFail()->id)->toBe($first->id);
+
+    $response = $this->postJson('/mcp/workspaces/'.$first->slug, mcpListTasks(), ['Authorization' => 'Bearer '.$token]);
+
+    $response->assertOk()
+        ->assertJsonCount(1, 'result.structuredContent.data')
+        ->assertJsonPath('result.structuredContent.data.0.id', $firstTask->id)
+        ->assertDontSee('Second workspace task');
 });
 
 test('requires bearer authentication even with a browser session', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
 
-    $this->actingAs($user)->postJson('/mcp/workspaces/'.$workspace->slug, mcpInitialize())->assertUnauthorized();
+    $response = $this->actingAs($user)->postJson('/mcp/workspaces/'.$workspace->slug, mcpInitialize());
+
+    $response->assertUnauthorized();
 });
 
 test('authenticates before resolving MCP workspace details', function () {
-    $this->postJson('/mcp/workspaces/unknown', mcpInitialize())->assertUnauthorized();
+    $response = $this->postJson('/mcp/workspaces/unknown', mcpInitialize());
+
+    $response->assertUnauthorized();
 });

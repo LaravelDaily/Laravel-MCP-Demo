@@ -31,16 +31,20 @@ test('lists only tasks from the selected workspace', function () {
     Task::factory()->for(Project::factory()->for($other))->create(['title' => 'Other accessible task']);
     Task::factory()->create(['title' => 'Foreign task']);
 
-    listTasksAs($user, $workspace)->assertOk()->assertStructuredContent([
-        'data' => [
-            ['id' => $first->id, 'title' => 'Visible task', 'project' => ['id' => $project->id, 'name' => 'Local project'], 'status' => 'in_progress', 'priority' => 'high', 'assignee' => ['id' => $user->id, 'name' => 'Reader'], 'due_date' => '2026-10-12'],
-            ['id' => $second->id, 'title' => 'Unassigned', 'project' => ['id' => $project->id, 'name' => 'Local project'], 'status' => 'todo', 'priority' => 'medium', 'assignee' => null, 'due_date' => null],
-        ],
-        'meta' => ['page' => 1, 'per_page' => 25, 'total' => 2, 'last_page' => 1],
-    ])->assertDontSee(['Foreign task', 'Other accessible task', 'Private detail', $user->email]);
+    $response = listTasksAs($user, $workspace);
+
+    $response->assertOk()
+        ->assertStructuredContent([
+            'data' => [
+                ['id' => $first->id, 'title' => 'Visible task', 'project' => ['id' => $project->id, 'name' => 'Local project'], 'status' => 'in_progress', 'priority' => 'high', 'assignee' => ['id' => $user->id, 'name' => 'Reader'], 'due_date' => '2026-10-12'],
+                ['id' => $second->id, 'title' => 'Unassigned', 'project' => ['id' => $project->id, 'name' => 'Local project'], 'status' => 'todo', 'priority' => 'medium', 'assignee' => null, 'due_date' => null],
+            ],
+            'meta' => ['page' => 1, 'per_page' => 25, 'total' => 2, 'last_page' => 1],
+        ])
+        ->assertDontSee(['Foreign task', 'Other accessible task', 'Private detail', $user->email]);
 });
 
-test('combines task filters without widening tenant scope', function (array $filters, array $expected) {
+test('combines task filters without widening tenant scope', function (Closure $filters, array $expected) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $project = Project::factory()->for($workspace)->create();
@@ -49,22 +53,23 @@ test('combines task filters without widening tenant scope', function (array $fil
     Task::factory()->for($project)->done()->create(['title' => 'Unrelated']);
     Task::factory()->for(Project::factory()->for($workspace))->inProgress()->highPriority()->create(['title' => 'Needle outside project']);
     Task::factory()->create(['title' => 'Needle foreign']);
-    $arguments = ['project_id' => $project->id] + $filters;
-    if (isset($arguments['assignee_id'])) {
-        $arguments['assignee_id'] = $user->id;
-    }
+    $arguments = ['project_id' => $project->id] + $filters($user);
     $ids = array_map(fn (int $index) => [$first->id, $second->id][$index], $expected);
 
-    listTasksAs($user, $workspace, $arguments)->assertOk()->assertStructuredContent(fn (AssertableJson $json) => $json
-        ->where('data', fn (Collection $data) => $data->pluck('id')->all() === $ids)
-        ->where('meta.total', count($ids))->etc());
+    $response = listTasksAs($user, $workspace, $arguments);
+
+    $response->assertOk()
+        ->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->where('data', fn (Collection $data) => $data->pluck('id')->all() === $ids)
+            ->where('meta.total', count($ids))
+            ->etc());
 })->with([
-    'project and search' => [['search' => '  Needle  '], [0, 1]],
-    'status' => [['status' => 'in_progress'], [0]],
-    'priority' => [['priority' => 'high'], [0]],
-    'assignee' => [['assignee_id' => 1], [0]],
-    'all filters' => [['status' => 'in_progress', 'priority' => 'high', 'assignee_id' => 1, 'search' => 'Needle'], [0]],
-    'incompatible filters' => [['status' => 'todo', 'priority' => 'high'], []],
+    'project and search' => [fn (User $user): array => ['search' => '  Needle  '], [0, 1]],
+    'status' => [fn (User $user): array => ['status' => 'in_progress'], [0]],
+    'priority' => [fn (User $user): array => ['priority' => 'high'], [0]],
+    'assignee' => [fn (User $user): array => ['assignee_id' => $user->id], [0]],
+    'all filters' => [fn (User $user): array => ['status' => 'in_progress', 'priority' => 'high', 'assignee_id' => $user->id, 'search' => 'Needle'], [0]],
+    'incompatible filters' => [fn (User $user): array => ['status' => 'todo', 'priority' => 'high'], []],
 ]);
 
 test('rejects invalid and foreign read filters', function (array $arguments, string $message) {
@@ -72,7 +77,10 @@ test('rejects invalid and foreign read filters', function (array $arguments, str
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     Task::factory()->for(Project::factory()->for($workspace))->create(['title' => 'Visible only on success']);
 
-    listTasksAs($user, $workspace, $arguments)->assertHasErrors([$message])->assertDontSee('Visible only on success');
+    $response = listTasksAs($user, $workspace, $arguments);
+
+    $response->assertHasErrors([$message])
+        ->assertDontSee('Visible only on success');
 })->with([
     'invalid status' => [['status' => 'blocked'], 'The status must be one of: todo, in_progress, done.'],
     'invalid priority' => [['priority' => 'urgent'], 'The priority must be one of: low, medium, high.'],
@@ -86,28 +94,40 @@ test('rejects invalid and foreign read filters', function (array $arguments, str
     'non-string search' => [['search' => ['x']], 'string'],
 ]);
 
-test('rejects filters in foreign and other accessible workspaces', function (string $kind) {
+test('rejects filters in foreign and other accessible workspaces', function (Closure $filters) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $other = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
     $foreignUser = User::factory()->create();
     $foreign = Workspace::factory()->withMember($foreignUser, WorkspaceRole::Owner)->create();
-    $project = Project::factory()->for($kind === 'accessible project' ? $other : $foreign)->create(['name' => 'Secret project']);
-    $arguments = $kind === 'foreign assignee' ? ['assignee_id' => $foreignUser->id] : ['project_id' => $project->id];
+    $project = Project::factory()->for($foreign)->create(['name' => 'Secret project']);
+    $otherProject = Project::factory()->for($other)->create(['name' => 'Other accessible project']);
 
-    listTasksAs($user, $workspace, $arguments)->assertHasErrors(['current workspace'])->assertDontSee(['Secret project', $foreignUser->name]);
-})->with(['foreign project', 'accessible project', 'foreign assignee']);
+    $response = listTasksAs($user, $workspace, $filters($project, $otherProject, $foreignUser));
+
+    $response->assertHasErrors(['current workspace'])
+        ->assertDontSee(['Secret project', $foreignUser->name]);
+})->with([
+    'foreign project' => [fn (Project $foreign, Project $other, User $assignee): array => ['project_id' => $foreign->id]],
+    'accessible project' => [fn (Project $foreign, Project $other, User $assignee): array => ['project_id' => $other->id]],
+    'foreign assignee' => [fn (Project $foreign, Project $other, User $assignee): array => ['assignee_id' => $assignee->id]],
+]);
 
 test('paginates read results with scoped totals and bounded page sizes', function (array $arguments, int $count, int $page, int $perPage, int $lastPage) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $tasks = Task::factory()->count(27)->for(Project::factory()->for($workspace))->create();
+    $tasks = Task::factory()
+        ->count(27)->for(Project::factory()->for($workspace))->create();
     Task::factory()->create();
     $ids = $tasks->pluck('id')->slice(($page - 1) * $perPage, $perPage)->values()->all();
 
-    listTasksAs($user, $workspace, $arguments)->assertOk()->assertStructuredContent(fn (AssertableJson $json) => $json
-        ->count('data', $count)->where('data', fn (Collection $data) => $data->pluck('id')->all() === $ids)
-        ->where('meta', ['page' => $page, 'per_page' => $perPage, 'total' => 27, 'last_page' => $lastPage]));
+    $response = listTasksAs($user, $workspace, $arguments);
+
+    $response->assertOk()
+        ->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->count('data', $count)
+            ->where('data', fn (Collection $data) => $data->pluck('id')->all() === $ids)
+            ->where('meta', ['page' => $page, 'per_page' => $perPage, 'total' => 27, 'last_page' => $lastPage]));
 })->with([
     'defaults' => [[], 25, 1, 25, 2],
     'second page' => [['page' => 2, 'per_page' => 10], 10, 2, 10, 3],
@@ -120,11 +140,16 @@ test('rejects invalid pagination bounds', function (array $arguments) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
 
-    listTasksAs($user, $workspace, $arguments)->assertHasErrors();
+    $response = listTasksAs($user, $workspace, $arguments);
+
+    $response->assertHasErrors();
 })->with([
-    'page zero' => [['page' => 0]], 'page negative' => [['page' => -1]],
-    'page fractional' => [['page' => 1.5]], 'page string' => [['page' => '1']],
-    'per page zero' => [['per_page' => 0]], 'per page too large' => [['per_page' => 101]],
+    'page zero' => [['page' => 0]],
+    'page negative' => [['page' => -1]],
+    'page fractional' => [['page' => 1.5]],
+    'page string' => [['page' => '1']],
+    'per page zero' => [['per_page' => 0]],
+    'per page too large' => [['per_page' => 101]],
     'per page null' => [['per_page' => null]],
 ]);
 
@@ -136,8 +161,14 @@ test('treats wildcard characters as literal search text', function (string $sear
     Task::factory()->for($project)->create(['title' => 'Unrelated task']);
     Task::factory()->create(['title' => 'Foreign '.$search.' match']);
 
-    listTasksAs($user, $workspace, ['search' => $search])->assertOk()->assertStructuredContent(fn (AssertableJson $json) => $json
-        ->count('data', 1)->where('data.0.id', $match->id)->where('meta.total', 1)->etc());
+    $response = listTasksAs($user, $workspace, ['search' => $search]);
+
+    $response->assertOk()
+        ->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->count('data', 1)
+            ->where('data.0.id', $match->id)
+            ->where('meta.total', 1)
+            ->etc());
 })->with(['%', '_', '!', "' OR 1=1 --"]);
 
 test('allows owners members and viewers to use read tools', function (WorkspaceRole $role) {
@@ -145,15 +176,22 @@ test('allows owners members and viewers to use read tools', function (WorkspaceR
     $workspace = Workspace::factory()->withMember($user, $role)->create();
     $task = Task::factory()->for(Project::factory()->for($workspace))->create();
 
-    listTasksAs($user, $workspace)->assertOk()->assertStructuredContent(fn (AssertableJson $json) => $json
-        ->count('data', 1)->where('data.0.id', $task->id)->etc());
+    $response = listTasksAs($user, $workspace);
+
+    $response->assertOk()
+        ->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->count('data', 1)
+            ->where('data.0.id', $task->id)
+            ->etc());
 })->with(WorkspaceRole::cases());
 
 test('rejects unsupported read arguments', function (string $argument) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
 
-    listTasksAs($user, $workspace, [$argument => 1])->assertHasErrors(['Unsupported argument: '.$argument]);
+    $response = listTasksAs($user, $workspace, [$argument => 1]);
+
+    $response->assertHasErrors(['The '.$argument.' field is not supported here.']);
 })->with(['actor_id', 'workspace_id', 'sort', 'description']);
 
 test('advertises read tool names schemas and safety metadata', function () {
@@ -163,7 +201,8 @@ test('advertises read tool names schemas and safety metadata', function () {
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'], ['Authorization' => 'Bearer '.$token]);
 
-    $response->assertOk()->assertJsonCount(1, 'result.tools')
+    $response->assertOk()
+        ->assertJsonCount(1, 'result.tools')
         ->assertJsonPath('result.tools.0.name', 'list_tasks')
         ->assertJsonPath('result.tools.0.inputSchema.additionalProperties', false)
         ->assertJsonPath('result.tools.0.inputSchema.properties.page.minimum', 1)
@@ -185,11 +224,47 @@ test('returns structured task results and a matching JSON text fallback over bea
 
     $response = $this->withSession([WorkspaceContext::SESSION_KEY => $other->id])->postJson('/mcp/workspaces/'.$workspace->slug, ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => ['name' => 'list_tasks', 'arguments' => (object) []]], ['Authorization' => 'Bearer '.$token]);
 
-    $response->assertOk()->assertJsonPath('result.isError', false)->assertJsonCount(1, 'result.structuredContent.data')
-        ->assertJsonPath('result.structuredContent.data.0.id', $task->id)->assertDontSee('Wrong workspace');
+    $response->assertOk()
+        ->assertJsonPath('result.isError', false)
+        ->assertJsonCount(1, 'result.structuredContent.data')
+        ->assertJsonPath('result.structuredContent.data.0.id', $task->id)
+        ->assertDontSee('Wrong workspace');
     expect(json_decode($response->json('result.content.0.text'), true, flags: JSON_THROW_ON_ERROR))->toBe($response->json('result.structuredContent'));
 
     Auth::forgetGuards();
     $this->postJson('/mcp/workspaces/'.$other->slug, ['jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/call', 'params' => ['name' => 'list_tasks', 'arguments' => (object) []]], ['Authorization' => 'Bearer '.$token])
-        ->assertOk()->assertJsonPath('result.structuredContent.data.0.title', 'Wrong workspace')->assertDontSee('Token reader task');
+        ->assertOk()
+        ->assertJsonPath('result.structuredContent.data.0.title', 'Wrong workspace')
+        ->assertDontSee('Token reader task');
+});
+
+test('reports every unsupported argument in one response', function () {
+    $user = User::factory()->create();
+    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
+
+    $response = listTasksAs($user, $workspace, ['actor_id' => 1, 'workspace_id' => 2, 'sort' => 'name']);
+
+    $response->assertHasErrors([
+        'The actor_id field is not supported here.',
+        'The workspace_id field is not supported here.',
+        'The sort field is not supported here.',
+    ]);
+});
+
+test('searches task text case-insensitively', function () {
+    $user = User::factory()->create();
+    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
+    $project = Project::factory()->for($workspace)->create();
+    Task::factory()->for($project)->create(['title' => 'MiXeD Title']);
+    Task::factory()->for($project)->create(['title' => 'Description match', 'description' => 'mIxEd description']);
+    Task::factory()->create(['title' => 'MIXED foreign task']);
+
+    $response = listTasksAs($user, $workspace, ['search' => 'MIXED']);
+
+    $response->assertOk()
+        ->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->count('data', 2)
+            ->where('meta.total', 2)
+            ->etc())
+        ->assertDontSee('MIXED foreign task');
 });

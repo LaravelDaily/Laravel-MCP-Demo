@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Concerns\TaskValidationRules;
 use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
 use App\Models\Task;
@@ -24,12 +25,14 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use Throwable;
 
 #[Name('list_tasks')]
-#[Description('List tasks in the endpoint workspace. Combine project, status, priority, assignee and literal title/description search filters. Results are ordered by ascending ID and paginated; use meta.last_page to retrieve further pages.')]
+#[Description('List tasks in the endpoint workspace. Combine project, status, priority, assignee and case-insensitive literal title/description search filters. Results are ordered by ascending ID and paginated; use meta.last_page to retrieve further pages.')]
 #[IsReadOnly]
 #[IsDestructive(false)]
 #[IsOpenWorld(false)]
 class ListTasksTool extends Tool
 {
+    use TaskValidationRules;
+
     public function __construct(protected WorkspaceContext $context) {}
 
     public function handle(Request $request): Response|ResponseFactory
@@ -53,33 +56,20 @@ class ListTasksTool extends Tool
         $rules = [
             'page' => ['sometimes', 'required', 'integer:strict', 'min:1'],
             'per_page' => ['sometimes', 'required', 'integer:strict', 'between:1,100'],
-            'project_id' => ['sometimes', 'required', 'integer:strict', 'min:1'],
-            'assignee_id' => ['sometimes', 'required', 'integer:strict', 'min:1'],
+            'project_id' => ['sometimes', 'required', 'integer:strict', 'min:1', $this->projectExistsRule($workspace->id)],
+            'assignee_id' => ['sometimes', 'required', 'integer:strict', 'min:1', $this->assigneeExistsRule($workspace->id)],
             'status' => ['sometimes', 'required', Rule::enum(TaskStatus::class)],
             'priority' => ['sometimes', 'required', Rule::enum(TaskPriority::class)],
             'search' => ['sometimes', 'required', 'string', 'max:200'],
         ];
 
-        foreach (array_diff(array_keys($request->all()), array_keys($rules)) as $argument) {
-            throw ValidationException::withMessages([$argument => 'Unsupported argument: '.$argument.'.']);
-        }
+        $this->rejectUnsupportedFields($request->all(), array_keys($rules));
 
         if (is_string($request->get('search'))) {
             $request->merge(['search' => trim($request->get('search'))]);
         }
 
-        $filters = $request->validate($rules, [
-            'status.Illuminate\\Validation\\Rules\\Enum' => 'The status must be one of: todo, in_progress, done.',
-            'priority.Illuminate\\Validation\\Rules\\Enum' => 'The priority must be one of: low, medium, high.',
-        ]);
-
-        if (isset($filters['project_id']) && ! $this->context->projects()->whereKey($filters['project_id'])->exists()) {
-            throw ValidationException::withMessages(['project_id' => 'The project must belong to the current workspace.']);
-        }
-
-        if (isset($filters['assignee_id']) && ! $workspace->members()->where('users.id', $filters['assignee_id'])->exists()) {
-            throw ValidationException::withMessages(['assignee_id' => 'The assignee must be a member of the current workspace.']);
-        }
+        $filters = $request->validate($rules, $this->taskValidationMessages());
 
         $query = $this->context->tasks()->with(['project', 'assignee']);
 
@@ -92,8 +82,8 @@ class ListTasksTool extends Tool
         if (isset($filters['search'])) {
             $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $filters['search']).'%';
             $query->where(function (Builder $query) use ($pattern): void {
-                $query->whereRaw("tasks.title like ? escape '!'", [$pattern])
-                    ->orWhereRaw("tasks.description like ? escape '!'", [$pattern]);
+                $query->whereRaw("LOWER(tasks.title) like LOWER(?) escape '!'", [$pattern])
+                    ->orWhereRaw("LOWER(tasks.description) like LOWER(?) escape '!'", [$pattern]);
             });
         }
 
@@ -128,7 +118,7 @@ class ListTasksTool extends Tool
             'status' => $schema->string()->enum(array_column(TaskStatus::cases(), 'value'))->description('Task status.'),
             'priority' => $schema->string()->enum(array_column(TaskPriority::cases(), 'value'))->description('Task priority.'),
             'assignee_id' => $schema->integer()->min(1)->description('Member ID within this workspace.'),
-            'search' => $schema->string()->min(1)->max(200)->description('Literal substring of title or description; trimmed before searching.'),
+            'search' => $schema->string()->min(1)->max(200)->description('Case-insensitive literal substring of title or description; trimmed before searching.'),
         ];
     }
 

@@ -93,7 +93,9 @@ trait TaskValidationRules
     {
         return [
             'assignee_id.exists' => __('The assignee must be a member of the current workspace.'),
+            'project_id.exists' => __('The project must belong to the current workspace.'),
             'status' => __('The status must be one of: todo, in_progress, done.'),
+            'priority' => __('The priority must be one of: low, medium, high.'),
         ];
     }
 
@@ -115,6 +117,14 @@ trait TaskValidationRules
                 ->mapWithKeys(fn (string $field) => [$field => __('The :field field is not supported here.', ['field' => $field])])
                 ->all());
         }
+    }
+
+    /**
+     * Restrict a project ID to the selected workspace.
+     */
+    protected function projectExistsRule(int $workspaceId): Exists
+    {
+        return Rule::exists('projects', 'id')->where('workspace_id', $workspaceId);
     }
 
     /**

@@ -68,11 +68,11 @@ composer types:check
 
 ## MCP connection
 
-Log in and open **Settings → MCP access** (`/settings/mcp-access`). Create a named personal access token and copy it immediately: plaintext is shown only on creation. Tokens do not expire; revoke them from this page when no longer needed. Stored hashes and other users' tokens are never displayed.
+Log in and open **Settings → MCP access** (`/settings/mcp-access`). Create a named personal access token and copy it immediately: plaintext is shown only on creation. The list shows creation and last-used times in UTC. Tokens do not expire; revoke them from this page when no longer needed. Stored hashes and other users' tokens are never displayed.
 
 The MCP endpoint is `https://teamboard.test/mcp/workspaces/{slug}`; demo slugs are `acme`, `sandbox`, and `globex`. Send `Authorization: Bearer <token>` on every request. Browser sessions are not accepted for MCP authentication. Identity comes from Sanctum, membership controls workspace access, and existing policies control operations; token abilities do not represent roles. The URL selects the workspace independently of the browser switcher. Invalid tokens receive 401; unknown or inaccessible workspace slugs receive 404.
 
-This checkpoint exposes **`list_tasks`** to owners, members, and viewers. Optional filters are `project_id`, `status` (`todo`, `in_progress`, `done`), `priority` (`low`, `medium`, `high`), `assignee_id`, and `search` (a trimmed literal substring of title or description, up to 200 characters). Filters combine conjunctively and project/member IDs must belong to the endpoint workspace. Unsupported arguments and explicit null filters are rejected.
+This checkpoint exposes **`list_tasks`** to owners, members, and viewers. Optional filters are `project_id`, `status` (`todo`, `in_progress`, `done`), `priority` (`low`, `medium`, `high`), `assignee_id`, and `search` (a trimmed, case-insensitive literal substring of title or description, up to 200 characters). Filters combine conjunctively and project/member IDs must belong to the endpoint workspace. Unsupported arguments and explicit null filters are rejected.
 
 Results are ordered by ascending task ID. `page` defaults to 1, `per_page` defaults to 25 and accepts 1–100. The structured response contains `data` task summaries and `meta: { page, per_page, total, last_page }`; pages past the end return empty data. Each summary has only `id`, `title`, `project: { id, name }`, `status`, `priority`, nullable `assignee: { id, name }`, and nullable `due_date` (`YYYY-MM-DD`). A matching JSON text fallback is supplied for clients that need it.
 
@@ -109,4 +109,4 @@ npx -y @modelcontextprotocol/inspector --cli \
 unset TEAMBOARD_TOKEN
 ```
 
-The `NODE_EXTRA_CA_CERTS` example above is the macOS Herd CA path verified here; adjust it for your environment before running Node clients. Keep TLS verification enabled. At the first-tool checkpoint, real HTTPS initialization/discovery/list_tasks, 401 without a token, foreign/unknown-workspace 404, revocation, and Inspector CLI discovery/call were verified using a temporary seeded Alice token (subsequently revoked). Claude Code verification is pending the reviewer’s manual check. Automated transport tests do not substitute for that client check.
+The `NODE_EXTRA_CA_CERTS` example above is the macOS Herd CA path verified here; adjust it for your environment before running Node clients. Keep TLS verification enabled. Automated transport tests do not substitute for that client check.
