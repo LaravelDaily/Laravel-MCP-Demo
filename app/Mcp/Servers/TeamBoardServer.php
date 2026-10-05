@@ -2,12 +2,15 @@
 
 namespace App\Mcp\Servers;
 
+use App\Mcp\Tools\AddCommentTool;
+use App\Mcp\Tools\AssignTaskTool;
 use App\Mcp\Tools\CreateTaskTool;
 use App\Mcp\Tools\GetTaskTool;
 use App\Mcp\Tools\ListMyTasksTool;
 use App\Mcp\Tools\ListProjectsTool;
 use App\Mcp\Tools\ListTasksTool;
 use App\Mcp\Tools\ListWorkspaceMembersTool;
+use App\Mcp\Tools\MoveTaskTool;
 use App\Mcp\Tools\SearchTasksTool;
 use App\Mcp\Tools\UpdateTaskTool;
 use Laravel\Mcp\Server;
@@ -25,6 +28,9 @@ class TeamBoardServer extends Server
         ListWorkspaceMembersTool::class,
         CreateTaskTool::class,
         UpdateTaskTool::class,
+        AssignTaskTool::class,
+        MoveTaskTool::class,
+        AddCommentTool::class,
     ];
 
     protected string $name = 'TeamBoard';

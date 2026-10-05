@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Models\Comment;
 use App\Models\Task;
 use App\Models\User;
+use Illuminate\Auth\Access\Response;
 
 class CommentPolicy
 {
@@ -22,8 +23,10 @@ class CommentPolicy
      * and deletion are out of scope; authors always come from the
      * authenticated identity.
      */
-    public function create(User $user, Task $task): bool
+    public function create(User $user, Task $task): Response
     {
-        return $user->roleIn($task->project->workspace_id)?->canContribute() === true;
+        return $user->roleIn($task->project->workspace_id)?->canContribute() === true
+            ? Response::allow()
+            : Response::deny('Your workspace role cannot add comments.');
     }
 }

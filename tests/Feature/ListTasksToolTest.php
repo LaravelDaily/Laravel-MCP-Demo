@@ -206,7 +206,7 @@ test('advertises read tool names schemas and safety metadata', function () {
     ], ['Authorization' => 'Bearer '.$token]);
 
     $response->assertOk()
-        ->assertJsonCount(8, 'result.tools')
+        ->assertJsonCount(11, 'result.tools')
         ->assertJsonPath('result.tools.0.name', 'list_tasks')
         ->assertJsonPath('result.tools.0.inputSchema.additionalProperties', false)
         ->assertJsonPath('result.tools.0.inputSchema.properties.page.minimum', 1)
