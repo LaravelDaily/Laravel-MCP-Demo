@@ -18,6 +18,7 @@ Implement phases 1–6 to complete the core demo. Phase 7 is a separately schedu
 - Do not introduce repositories, DTO layers, a generic task manager, a tenancy package, a separate MCP permission model, or a generic `manage_task(action, payload)` tool.
 - Sanctum in phase 3 and Passport in phase 7 are the only planned dependency additions. Follow repository authorization requirements before dependency changes; do not add other dependencies or testing plugins without approval.
 - Do not deploy, publish, push commits, or push tags as part of implementation unless separately authorized. Local commits and the checkpoint tags below are required when implementation is authorized.
+- The local demo URL is `https://teamboard.test` (a Laravel Herd site secured with `herd secure`); use it for `APP_URL`, MCP endpoint examples, and README instructions. Students without Herd substitute their own HTTPS URL.
 - Keep UI styling consistent with the existing Livewire/Flux starter kit. Reuse existing layouts and components. Avoid elaborate design work.
 - Out of scope: billing, Stripe integration, invitations, membership management UI, workspace creation/onboarding, notifications, websockets, attachments, tags, subtasks, calendars, external integrations, public REST APIs, impersonation, AI-generated content, streaming demonstrations, and MCP Apps. Stripe may appear in seeded task titles only.
 
@@ -211,8 +212,8 @@ After C04 and baseline checks, create **`course/00-teamboard-baseline`**. The ap
 
 ### Transport and identity
 
-- Install/configure Sanctum using current official instructions. Preserve existing browser authentication. Do not implement custom bearer-token parsing or hard-code tokens.
-- Add a minimal authenticated account-settings section to create and revoke named MCP personal access tokens. Names are trimmed, required strings of at most 100 characters. Show the plaintext token only on creation. Do not expose stored hashes, other users' tokens, or a persistent plaintext token list. Keep the token usable for MCP without inventing owner/member/viewer token abilities.
+- Install/configure Sanctum using current official instructions, as a minimal install: require the package, publish its configuration and migration, and add API tokens to the user model. Do not run `install:api` or add `routes/api.php`; the MCP endpoint is the only token-authenticated surface. Preserve existing browser authentication. Do not implement custom bearer-token parsing or hard-code tokens.
+- Add a minimal authenticated **MCP access** settings page (its own settings tab and route, not part of the Security page) to create and revoke named MCP personal access tokens. Tokens do not expire; revocation is the control, and the README says so. Names are trimmed, required strings of at most 100 characters. Show the plaintext token only on creation. Do not expose stored hashes, other users' tokens, or a persistent plaintext token list. Keep the token usable for MCP without inventing owner/member/viewer token abilities.
 - Register TeamBoard's web MCP server in `routes/ai.php` at `/mcp/workspaces/{workspace}` using the workspace slug. Use installed Laravel MCP registration APIs, Sanctum authentication, and a middleware/adapter that validates membership and sets request workspace context.
 - Authenticate before resolving/disclosing workspace details. Missing/invalid/revoked bearer token returns HTTP 401. An authenticated user requesting a nonexistent or non-member workspace gets HTTP 404 without workspace data.
 - Bearer identity comes from the MCP request's authenticated user. Actor IDs are not tool arguments. UI session workspace selection never overrides the workspace in the MCP URL.
@@ -272,7 +273,7 @@ Validate project/assignee filters against the selected workspace, not global exi
 6. **C06 — `Add list_tasks with structured responses`**: first tool and its tests. After relevant checks, create **`course/01-first-tool`**. Verify an actual client can list tasks through bearer authentication.
 7. **C07 — `Add remaining read tools and member lookup`**: the five other tools and read tests. Create **`course/02-read-tools`** after checks.
 
-Use Inspector and a compatible AI client for manual connection verification. Fetch current client configuration instructions when needed. Lack of access to a real client must be reported rather than represented as an automated-test failure or successful verification.
+Use Inspector and Claude Code, the primary documented client, for manual connection verification. Fetch current client configuration instructions when needed. Lack of access to a real client must be reported rather than represented as an automated-test failure or successful verification.
 
 ## Phase 4 — Agent mutations, destructive operations, and tool discovery
 
@@ -350,7 +351,7 @@ Resolve the project through the selected endpoint workspace and authorize viewin
 
 ### Prompt
 
-Register `project_review` with required `project_id`, validating and authorizing the selected-workspace project. Return the package's normal prompt messages, containing project identity and today's date in the configured application timezone.
+Register `project_review` with required `project_id`, validating and authorizing the selected-workspace project. Return the package's normal prompt messages, containing project identity and today's date in the configured application timezone, which stays `UTC`.
 
 The prompt directs the client to read the project's instructions resource and use existing read tools, paginating as needed, to inspect unfinished tasks; identify overdue unfinished tasks (due date strictly before today), high-priority unfinished tasks, unassigned tasks, and likely blockers; summarize findings; and recommend the next three actions. Blockers are an inference from descriptions/comments, not a new task status or database field. Tell the client not to mutate data without a separate user request.
 
@@ -383,7 +384,7 @@ Create **`course/05-resources-prompts`** after checks. Verify via Inspector even
 
 ### Rate limiting
 
-Use standard Laravel named rate limiting on MCP POST requests, with a default of 60 requests per minute per authenticated user across all workspace endpoints. Return HTTP 429 with retry information when exhausted. Put authentication before the per-user limiter and apply it to all JSON-RPC methods, including initialization/discovery, not only tool writes. Keep limit configuration small and documented. Do not introduce a distributed cache dependency for the local demo.
+Use standard Laravel named rate limiting on MCP POST requests, with a default of 60 requests per minute per authenticated user across all workspace endpoints. Return HTTP 429 with retry information when exhausted. Put authentication before the per-user limiter and apply it to all JSON-RPC methods, including initialization/discovery, not only tool writes. Read the limit from one config value backed by an environment variable (default 60), documented in the README, so a demo can lower it; tests set it explicitly. Do not introduce a distributed cache dependency for the local demo.
 
 ### Audit trail
 
@@ -437,7 +438,7 @@ Create **`course/06-production-basics`** after core-completion checks. Phases 1�
 
 - Install/configure Passport and required authenticatable contracts/guard, keys, migrations, authorization views, and official Laravel MCP OAuth discovery/client-registration routes using version-appropriate documentation.
 - Migrate the teaching MCP endpoint from Sanctum bearer authentication to Passport's documented OAuth guard. Preserve the workspace URL and resolver contract, tool schemas, policies, validation, auditing, and rate limits. Do not maintain two authentication modes on one endpoint or rewrite the tools.
-- Leave phase 6's Sanctum behavior reproducible at its tag. In the OAuth final application remove or clearly retire the Sanctum MCP-token UI so users are not offered tokens that the endpoint rejects. Do not remove existing starter-kit login/security capabilities. Removing an installed dependency still follows repository authorization rules.
+- Leave phase 6's Sanctum behavior reproducible at its tag. In the OAuth final application remove Sanctum entirely: the MCP access page and its route, the API-token trait on the user model, the package, and its token table through a new migration. Keep a regression test that former Sanctum tokens are rejected. Do not remove existing starter-kit login/security capabilities.
 - Update superseded Sanctum endpoint/token-UI tests to the final OAuth contract, preserving their earlier implementation at `course/06-production-basics`. The final suite must not simultaneously require Sanctum-token acceptance and rejection at the same endpoint. Keep shared domain/tenant/policy tests and retain regression coverage for retired UI and rejected legacy tokens; do not delete test files without authorization.
 - Implement the normal unauthenticated challenge/discovery, supported client registration, browser login/consent, authorization-code exchange with PKCE, token use, and revocation. Never put generated OAuth keys, secrets, access tokens, or refresh tokens into Git.
 - Use official Laravel MCP Passport helpers and the advertised `mcp:use` scope. Do not map workspace roles to OAuth scopes. The same actor can be an owner in one workspace and viewer in another.
