@@ -20,9 +20,16 @@ class TeamBoardDemoSeeder extends Seeder
     /**
      * Seed the deterministic local-demo dataset. Due dates are calculated
      * relative to the seeding time so the review scenarios stay useful.
+     * Seeding again is skipped rather than duplicating or resetting data.
      */
     public function run(): void
     {
+        if (Workspace::query()->where('slug', 'acme')->exists()) {
+            $this->command->warn('TeamBoard demo data already exists; run migrate:fresh --seed to recreate it.');
+
+            return;
+        }
+
         $acme = Workspace::create(['name' => 'Acme', 'slug' => 'acme']);
         $sandbox = Workspace::create(['name' => 'Sandbox', 'slug' => 'sandbox']);
         $globex = Workspace::create(['name' => 'Globex', 'slug' => 'globex']);

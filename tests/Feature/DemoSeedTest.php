@@ -79,3 +79,13 @@ test('seeds recognizable isolated workspaces and usable demo accounts', function
     expect($cancellation->status)->toBe(TaskStatus::Done)
         ->and($cancellation->due_date->isPast())->toBeTrue();
 });
+
+test('skips demo seeding when the demo data already exists', function () {
+    $this->seed(TeamBoardDemoSeeder::class);
+
+    $this->seed(TeamBoardDemoSeeder::class);
+
+    expect(Workspace::query()->count())->toBe(3)
+        ->and(User::query()->count())->toBe(5)
+        ->and(Task::query()->where('title', 'Redesign pricing page')->count())->toBe(1);
+});
