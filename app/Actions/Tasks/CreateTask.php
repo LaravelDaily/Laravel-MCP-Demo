@@ -21,7 +21,8 @@ class CreateTask
 
     /**
      * Create a task in a project of the selected workspace. New tasks
-     * default to todo status and medium priority.
+     * default to todo status and medium priority; status and other
+     * unsupported fields are rejected.
      *
      * @param  array<string, mixed>  $input
      *
@@ -32,6 +33,8 @@ class CreateTask
         $project = $this->projectInSelectedWorkspace($project);
 
         $this->gate->forUser($actor)->authorize('create', [Task::class, $project]);
+
+        $this->rejectUnsupportedFields($input, ['title', 'description', 'assignee_id', 'due_date', 'priority']);
 
         if (is_string($input['title'] ?? null)) {
             $input['title'] = trim($input['title']);

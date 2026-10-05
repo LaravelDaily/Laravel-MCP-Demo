@@ -21,8 +21,8 @@ class UpdateTaskDetails
      * Partially update a task's metadata. Omitted fields are unchanged;
      * an explicit null clears the description or due date, while title and
      * priority cannot be null. At least one editable field is required.
-     * Status, assignment, and project ownership are separate operations
-     * and cannot be changed here.
+     * Status, assignment, and project ownership are separate operations;
+     * submitting them, or any other unsupported field, fails validation.
      *
      * @param  array<string, mixed>  $input
      *
@@ -34,15 +34,13 @@ class UpdateTaskDetails
 
         $this->gate->forUser($actor)->authorize('update', $task);
 
-        $editableFields = ['title', 'description', 'priority', 'due_date'];
+        $this->rejectUnsupportedFields($input, ['title', 'description', 'priority', 'due_date']);
 
-        if (array_intersect(array_keys($input), $editableFields) === []) {
+        if ($input === []) {
             throw ValidationException::withMessages([
                 'update' => __('At least one task field is required.'),
             ]);
         }
-
-        $input = array_intersect_key($input, array_flip($editableFields));
 
         if (is_string($input['title'] ?? null)) {
             $input['title'] = trim($input['title']);

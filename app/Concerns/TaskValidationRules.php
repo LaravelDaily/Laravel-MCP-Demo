@@ -7,6 +7,7 @@ use App\Enums\TaskStatus;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Rules\Exists;
+use Illuminate\Validation\ValidationException;
 
 trait TaskValidationRules
 {
@@ -94,6 +95,26 @@ trait TaskValidationRules
             'assignee_id.exists' => __('The assignee must be a member of the current workspace.'),
             'status' => __('The status must be one of: todo, in_progress, done.'),
         ];
+    }
+
+    /**
+     * Reject input keys an operation does not accept, so callers cannot
+     * change status, assignment, project, or other attributes through it.
+     *
+     * @param  array<string, mixed>  $input
+     * @param  list<string>  $supportedFields
+     *
+     * @throws ValidationException
+     */
+    protected function rejectUnsupportedFields(array $input, array $supportedFields): void
+    {
+        $unsupportedFields = array_diff(array_keys($input), $supportedFields);
+
+        if ($unsupportedFields !== []) {
+            throw ValidationException::withMessages(collect($unsupportedFields)
+                ->mapWithKeys(fn (string $field) => [$field => __('The :field field is not supported here.', ['field' => $field])])
+                ->all());
+        }
     }
 
     /**

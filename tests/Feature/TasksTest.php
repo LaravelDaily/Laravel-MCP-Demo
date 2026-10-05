@@ -308,6 +308,33 @@ test('preserves omitted metadata and clears explicit nullable fields', function 
         ->and($task->priority)->toBe(TaskPriority::Medium);
 });
 
+test('rejects unsupported fields in shared task operations', function (string $field, mixed $value) {
+    $owner = User::factory()->create();
+    $workspace = workspaceWithMember($owner, WorkspaceRole::Owner);
+    $project = Project::factory()->for($workspace)->create();
+    $otherProject = Project::factory()->for($workspace)->create();
+    $task = Task::factory()->for($project)->create(['title' => 'Original title']);
+    $value ??= $otherProject->id;
+
+    $this->actingAs($owner);
+
+    expect(fn () => app(UpdateTaskDetails::class)($owner, $task, ['title' => 'Renamed', $field => $value]))
+        ->toThrow(ValidationException::class, "The {$field} field is not supported here.")
+        ->and(fn () => app(CreateTask::class)($owner, $project, ['title' => 'New task', $field => $value]))
+        ->toThrow(ValidationException::class, "The {$field} field is not supported here.");
+
+    $task->refresh();
+
+    expect($task->title)->toBe('Original title')
+        ->and($task->project_id)->toBe($project->id)
+        ->and($task->status)->toBe(TaskStatus::Todo);
+    $this->assertDatabaseCount('tasks', 1);
+})->with([
+    'status' => ['status', 'done'],
+    'project in the same workspace' => ['project_id', null],
+    'arbitrary attribute' => ['created_at', '2020-01-01'],
+]);
+
 test('creates comments with the authenticated author', function () {
     $author = User::factory()->create();
     $workspace = workspaceWithMember($author, WorkspaceRole::Member);
