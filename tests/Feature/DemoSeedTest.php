@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
 use App\Enums\WorkspaceRole;
 use App\Models\Project;
@@ -59,8 +60,10 @@ test('seeds recognizable isolated workspaces and usable demo accounts', function
         'Add invoice download',
         'Improve subscription cancellation flow',
     )->and($acme->tasks()->pluck('status')->map(fn (TaskStatus $status) => $status->value)->unique()->values()->all())->toContain('todo', 'in_progress', 'done')
+        ->and($acme->tasks()->pluck('priority')->map(fn (TaskPriority $priority) => $priority->value)->unique()->values()->all())->toContain('low', 'medium', 'high')
         ->and($acme->tasks()->whereNull('assignee_id')->exists())->toBeTrue()
-        ->and($acme->tasks()->whereNotNull('assignee_id')->exists())->toBeTrue()
+        ->and($acme->tasks()->where('assignee_id', $alice->id)->exists())->toBeTrue()
+        ->and($acme->tasks()->where('assignee_id', $bob->id)->exists())->toBeTrue()
         ->and($globex->tasks()->pluck('title')->all())->toContain('Migrate payroll data to the new provider')
         ->and($sandbox->tasks()->pluck('title')->all())->toContain('Test webhook integration');
 
