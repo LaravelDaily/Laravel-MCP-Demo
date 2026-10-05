@@ -236,6 +236,31 @@ test('rejects an assignee outside the current workspace', function () {
     expect($task->fresh()->assignee_id)->toBe($colleague->id);
 });
 
+test('restores inline status and assignee after a rejected change', function () {
+    $owner = User::factory()->create();
+    $workspace = workspaceWithMember($owner, WorkspaceRole::Owner);
+    $project = Project::factory()->for($workspace)->create();
+    $task = Task::factory()->for($project)->inProgress()->assignedTo($owner)->create();
+
+    $foreignUser = User::factory()->create();
+    Workspace::factory()->withMember($foreignUser, WorkspaceRole::Owner)->create();
+
+    $this->actingAs($owner);
+
+    Livewire::test(TaskShow::class, ['taskId' => $task->id])
+        ->set('status', 'urgent')
+        ->call('changeStatus')
+        ->assertHasErrors('status')
+        ->assertSet('status', 'in_progress')
+        ->set('assignee_id', (string) $foreignUser->id)
+        ->call('assign')
+        ->assertHasErrors('assignee_id')
+        ->assertSet('assignee_id', (string) $owner->id);
+
+    expect($task->fresh()->status)->toBe(TaskStatus::InProgress)
+        ->and($task->fresh()->assignee_id)->toBe($owner->id);
+});
+
 test('allows assignment to a viewer and explicit unassignment', function () {
     $owner = User::factory()->create();
     $workspace = workspaceWithMember($owner, WorkspaceRole::Owner);

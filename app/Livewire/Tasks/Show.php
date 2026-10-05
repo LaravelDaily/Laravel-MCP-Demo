@@ -57,10 +57,7 @@ class Show extends Component
     {
         $this->taskId = $taskId;
 
-        $task = $this->task();
-
-        $this->status = $task->status->value;
-        $this->assignee_id = (string) ($task->assignee_id ?? '');
+        $this->syncInlineControls();
     }
 
     /**
@@ -148,11 +145,16 @@ class Show extends Component
     }
 
     /**
-     * Apply the inline status select.
+     * Apply the inline status select. The select always ends up showing the
+     * persisted status, including after a rejected change.
      */
     public function changeStatus(): void
     {
-        app(ChangeTaskStatus::class)(auth()->user(), $this->task(), $this->status);
+        try {
+            app(ChangeTaskStatus::class)(auth()->user(), $this->task(), $this->status);
+        } finally {
+            $this->syncInlineControls();
+        }
 
         Flux::toast(variant: 'success', text: __('Status updated.'));
     }
@@ -162,13 +164,29 @@ class Show extends Component
      */
     public function assign(): void
     {
-        app(AssignTask::class)(
-            auth()->user(),
-            $this->task(),
-            $this->assignee_id === '' ? null : (int) $this->assignee_id,
-        );
+        try {
+            app(AssignTask::class)(
+                auth()->user(),
+                $this->task(),
+                $this->assignee_id === '' ? null : (int) $this->assignee_id,
+            );
+        } finally {
+            $this->syncInlineControls();
+        }
 
         Flux::toast(variant: 'success', text: __('Assignment updated.'));
+    }
+
+    /**
+     * Show the task's persisted status and assignee in the inline selects,
+     * so a rejected change does not leave the select on the rejected value.
+     */
+    protected function syncInlineControls(): void
+    {
+        $task = $this->task();
+
+        $this->status = $task->status->value;
+        $this->assignee_id = (string) ($task->assignee_id ?? '');
     }
 
     /**
