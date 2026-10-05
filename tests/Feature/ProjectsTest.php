@@ -35,7 +35,7 @@ test('allows owners to create edit and delete projects', function () {
         ->assertSet('editingId', $project->id)
         ->assertSet('name', 'Website Redesign')
         ->set('name', 'Website Relaunch')
-        ->set('description', null)
+        ->set('description', '')
         ->set('instructions', 'Require acceptance criteria and reproduction steps.')
         ->call('save')
         ->assertHasNoErrors();

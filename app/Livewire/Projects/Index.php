@@ -106,6 +106,8 @@ class Index extends Component
         $context = app(WorkspaceContext::class);
 
         $this->name = trim($this->name);
+        $this->description = $this->description === '' ? null : $this->description;
+        $this->instructions = $this->instructions === '' ? null : $this->instructions;
 
         if ($this->editingId !== null) {
             $project = $context->project($this->editingId);
