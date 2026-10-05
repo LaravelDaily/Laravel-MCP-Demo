@@ -125,6 +125,18 @@ class WorkspaceContext
     }
 
     /**
+     * Resolve a project of the current workspace by ID. Foreign and missing
+     * IDs are rejected as not found, without revealing that the record
+     * exists elsewhere.
+     *
+     * @throws ModelNotFoundException<Project>
+     */
+    public function project(int $projectId): Project
+    {
+        return $this->projects()->findOrFail($projectId);
+    }
+
+    /**
      * Switch the browser selection to a workspace the current user belongs
      * to. A foreign or missing workspace is rejected as not found and never
      * stored, so the response does not reveal whether it exists.
