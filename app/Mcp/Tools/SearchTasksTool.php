@@ -12,7 +12,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('search_tasks')]
-#[Description('Search task titles and descriptions in the endpoint workspace with a required case-insensitive literal substring query. Optionally filter project and status. Paginate in ascending ID order.')]
+#[Description('Search task titles and descriptions in the endpoint workspace with a required literal substring query. Optionally filter project and status. Paginate in ascending ID order. Search is case-insensitive for ASCII letters on SQLite; non-ASCII case folding depends on the database')]
 #[IsReadOnly]
 #[IsDestructive(false)]
 #[IsOpenWorld(false)]

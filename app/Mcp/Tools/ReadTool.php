@@ -151,7 +151,6 @@ abstract class ReadTool extends Tool
             'priority' => $task->priority->value,
             'assignee' => $task->assignee === null ? null : ['id' => $task->assignee->id, 'name' => $task->assignee->name],
             'due_date' => $task->due_date?->format('Y-m-d'),
-
         ];
     }
 
@@ -177,7 +176,7 @@ abstract class ReadTool extends Tool
 
     protected function searchSchema(JsonSchema $schema): Type
     {
-        return $schema->string()->min(1)->max(200)->description('Case-insensitive literal substring; trimmed before searching.');
+        return $schema->string()->min(1)->max(200)->description('Literal substring; trimmed before searching. Case-insensitive for ASCII letters on SQLite; non-ASCII case folding depends on the database.');
     }
 
     /** @return array<string, Type> */

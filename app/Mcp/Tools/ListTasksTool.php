@@ -12,7 +12,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('list_tasks')]
-#[Description('List tasks in the endpoint workspace. Combine project, status, priority, assignee and case-insensitive literal title/description search filters. Results are ordered by ascending ID and paginated; use meta.last_page to retrieve further pages.')]
+#[Description('List tasks in the endpoint workspace. Combine project, status, priority, assignee and literal title/description search filters. Results are ordered by ascending ID and paginated; use meta.last_page to retrieve further pages. Search is case-insensitive for ASCII letters on SQLite; non-ASCII case folding depends on the database')]
 #[IsReadOnly]
 #[IsDestructive(false)]
 #[IsOpenWorld(false)]

@@ -15,7 +15,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('list_projects')]
-#[Description('List projects in the endpoint workspace with unfinished task counts. Optionally search names and descriptions by case-insensitive literal substring. Paginate in ascending ID order.')]
+#[Description('List projects in the endpoint workspace with unfinished task counts. Optionally search names and descriptions by literal substring. Paginate in ascending ID order. Search is case-insensitive for ASCII letters on SQLite; non-ASCII case folding depends on the database')]
 #[IsReadOnly]
 #[IsDestructive(false)]
 #[IsOpenWorld(false)]
@@ -27,7 +27,7 @@ class ListProjectsTool extends ReadTool
             'search' => ['sometimes', 'required', 'string', 'max:200'],
         ]);
         $query = $this->context->projects()->withCount([
-            'tasks as open_task_count' => fn (Builder $query) => $query->whereIn('status', [TaskStatus::Todo, TaskStatus::InProgress]),
+            'tasks as open_task_count' => fn (Builder $query) => $query->whereIn('status', TaskStatus::openValues()),
         ]);
 
         if (isset($filters['search'])) {

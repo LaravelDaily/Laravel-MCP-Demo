@@ -14,7 +14,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('list_workspace_members')]
-#[Description('List members of the endpoint workspace with their workspace-specific roles. Returns public ID and name only, with no email. Optionally search names by case-insensitive literal substring; paginate in ascending ID order.')]
+#[Description('List members of the endpoint workspace with their workspace-specific roles. Returns public ID and name only, with no email. Optionally search names by literal substring; paginate in ascending ID order. Search is case-insensitive for ASCII letters on SQLite; non-ASCII case folding depends on the database')]
 #[IsReadOnly]
 #[IsDestructive(false)]
 #[IsOpenWorld(false)]

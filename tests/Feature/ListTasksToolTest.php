@@ -199,7 +199,11 @@ test('advertises read tool names schemas and safety metadata', function () {
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
     $token = $user->createToken('Discovery')->plainTextToken;
 
-    $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'], ['Authorization' => 'Bearer '.$token]);
+    $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'tools/list',
+    ], ['Authorization' => 'Bearer '.$token]);
 
     $response->assertOk()
         ->assertJsonCount(6, 'result.tools')
@@ -222,7 +226,13 @@ test('returns structured task results and a matching JSON text fallback over bea
     Task::factory()->for(Project::factory()->for($other))->create(['title' => 'Wrong workspace']);
     $token = $user->createToken('Client')->plainTextToken;
 
-    $response = $this->withSession([WorkspaceContext::SESSION_KEY => $other->id])->postJson('/mcp/workspaces/'.$workspace->slug, ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => ['name' => 'list_tasks', 'arguments' => (object) []]], ['Authorization' => 'Bearer '.$token]);
+    $response = $this->withSession([WorkspaceContext::SESSION_KEY => $other->id])
+        ->postJson('/mcp/workspaces/'.$workspace->slug, [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/call',
+            'params' => ['name' => 'list_tasks', 'arguments' => (object) []],
+        ], ['Authorization' => 'Bearer '.$token]);
 
     $response->assertOk()
         ->assertJsonPath('result.isError', false)
@@ -232,8 +242,14 @@ test('returns structured task results and a matching JSON text fallback over bea
     expect(json_decode($response->json('result.content.0.text'), true, flags: JSON_THROW_ON_ERROR))->toBe($response->json('result.structuredContent'));
 
     Auth::forgetGuards();
-    $this->postJson('/mcp/workspaces/'.$other->slug, ['jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/call', 'params' => ['name' => 'list_tasks', 'arguments' => (object) []]], ['Authorization' => 'Bearer '.$token])
-        ->assertOk()
+    $response = $this->postJson('/mcp/workspaces/'.$other->slug, [
+        'jsonrpc' => '2.0',
+        'id' => 2,
+        'method' => 'tools/call',
+        'params' => ['name' => 'list_tasks', 'arguments' => (object) []],
+    ], ['Authorization' => 'Bearer '.$token]);
+
+    $response->assertOk()
         ->assertJsonPath('result.structuredContent.data.0.title', 'Wrong workspace')
         ->assertDontSee('Token reader task');
 });
