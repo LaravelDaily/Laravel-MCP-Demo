@@ -15,7 +15,7 @@ class ProjectPolicy
      */
     public function view(User $user, Project $project): bool
     {
-        return $user->belongsToWorkspace($project->workspace);
+        return $user->belongsToWorkspace($project->workspace_id);
     }
 
     /**
@@ -31,7 +31,7 @@ class ProjectPolicy
      */
     public function update(User $user, Project $project): bool
     {
-        return $user->roleIn($project->workspace) === WorkspaceRole::Owner;
+        return $user->roleIn($project->workspace_id) === WorkspaceRole::Owner;
     }
 
     /**
@@ -39,6 +39,6 @@ class ProjectPolicy
      */
     public function delete(User $user, Project $project): bool
     {
-        return $user->roleIn($project->workspace) === WorkspaceRole::Owner;
+        return $user->roleIn($project->workspace_id) === WorkspaceRole::Owner;
     }
 }

@@ -15,7 +15,7 @@ class TaskPolicy
      */
     public function view(User $user, Task $task): bool
     {
-        return $user->belongsToWorkspace($task->project->workspace);
+        return $user->belongsToWorkspace($task->project->workspace_id);
     }
 
     /**
@@ -23,7 +23,7 @@ class TaskPolicy
      */
     public function create(User $user, Project $project): bool
     {
-        return in_array($user->roleIn($project->workspace), [WorkspaceRole::Owner, WorkspaceRole::Member], true);
+        return $user->roleIn($project->workspace_id)?->canContribute() === true;
     }
 
     /**
@@ -31,7 +31,7 @@ class TaskPolicy
      */
     public function update(User $user, Task $task): bool
     {
-        return in_array($user->roleIn($task->project->workspace), [WorkspaceRole::Owner, WorkspaceRole::Member], true);
+        return $user->roleIn($task->project->workspace_id)?->canContribute() === true;
     }
 
     /**
@@ -40,7 +40,7 @@ class TaskPolicy
      */
     public function assign(User $user, Task $task): bool
     {
-        return in_array($user->roleIn($task->project->workspace), [WorkspaceRole::Owner, WorkspaceRole::Member], true);
+        return $user->roleIn($task->project->workspace_id)?->canContribute() === true;
     }
 
     /**
@@ -48,7 +48,7 @@ class TaskPolicy
      */
     public function move(User $user, Task $task): bool
     {
-        return in_array($user->roleIn($task->project->workspace), [WorkspaceRole::Owner, WorkspaceRole::Member], true);
+        return $user->roleIn($task->project->workspace_id)?->canContribute() === true;
     }
 
     /**
@@ -56,6 +56,6 @@ class TaskPolicy
      */
     public function delete(User $user, Task $task): bool
     {
-        return $user->roleIn($task->project->workspace) === WorkspaceRole::Owner;
+        return $user->roleIn($task->project->workspace_id) === WorkspaceRole::Owner;
     }
 }

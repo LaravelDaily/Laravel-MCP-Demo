@@ -83,16 +83,19 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return $this->hasMany(Membership::class);
     }
 
-    public function roleIn(Workspace $workspace): ?WorkspaceRole
+    /**
+     * Resolve the user's role in a workspace, given the model or its ID.
+     */
+    public function roleIn(Workspace|int $workspace): ?WorkspaceRole
     {
         $membership = $this->memberships()
-            ->where('workspace_id', $workspace->getKey())
+            ->where('workspace_id', $workspace instanceof Workspace ? $workspace->getKey() : $workspace)
             ->first();
 
         return $membership?->role;
     }
 
-    public function belongsToWorkspace(Workspace $workspace): bool
+    public function belongsToWorkspace(Workspace|int $workspace): bool
     {
         return $this->roleIn($workspace) !== null;
     }

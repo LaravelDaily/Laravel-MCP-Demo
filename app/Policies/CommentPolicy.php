@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Enums\WorkspaceRole;
 use App\Models\Comment;
 use App\Models\Task;
 use App\Models\User;
@@ -15,7 +14,7 @@ class CommentPolicy
      */
     public function view(User $user, Comment $comment): bool
     {
-        return $user->belongsToWorkspace($comment->task->project->workspace);
+        return $user->belongsToWorkspace($comment->task->project->workspace_id);
     }
 
     /**
@@ -25,6 +24,6 @@ class CommentPolicy
      */
     public function create(User $user, Task $task): bool
     {
-        return in_array($user->roleIn($task->project->workspace), [WorkspaceRole::Owner, WorkspaceRole::Member], true);
+        return $user->roleIn($task->project->workspace_id)?->canContribute() === true;
     }
 }
