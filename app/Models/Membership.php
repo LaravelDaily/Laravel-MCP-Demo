@@ -19,6 +19,20 @@ class Membership extends Pivot
     protected $table = 'workspace_user';
 
     /**
+     * The composite key columns. Declared here so memberships loaded outside
+     * a BelongsToMany relation, such as through memberships(), can still be
+     * updated and deleted.
+     *
+     * @var string
+     */
+    public $foreignKey = 'workspace_id';
+
+    /**
+     * @var string
+     */
+    public $relatedKey = 'user_id';
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

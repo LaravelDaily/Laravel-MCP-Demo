@@ -21,6 +21,26 @@ test('allows a user to belong to multiple workspaces with different roles', func
         ->and($acme->members->pluck('id')->all())->toBe([$dana->id]);
 });
 
+test('updates and deletes a membership loaded through its workspace', function () {
+    $user = User::factory()->create();
+    $otherMember = User::factory()->create();
+
+    $workspace = Workspace::factory()
+        ->withMember($user, WorkspaceRole::Member)
+        ->withMember($otherMember, WorkspaceRole::Member)
+        ->create();
+
+    $workspace->memberships()->where('user_id', $user->id)->firstOrFail()->update(['role' => WorkspaceRole::Viewer]);
+
+    expect($user->roleIn($workspace))->toBe(WorkspaceRole::Viewer)
+        ->and($otherMember->roleIn($workspace))->toBe(WorkspaceRole::Member);
+
+    $workspace->memberships()->where('user_id', $user->id)->firstOrFail()->delete();
+
+    expect($user->roleIn($workspace))->toBeNull()
+        ->and($otherMember->roleIn($workspace))->toBe(WorkspaceRole::Member);
+});
+
 test('resolves project tasks and comment authors through their relationships', function () {
     $alice = User::factory()->create();
     $bob = User::factory()->create();
