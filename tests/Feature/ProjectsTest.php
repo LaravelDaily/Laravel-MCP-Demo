@@ -184,3 +184,21 @@ test('paginates projects and project tasks within the component', function () {
         ->assertSee('Listed task 11')
         ->assertDontSee('Listed task 10');
 });
+
+test('shows an empty projects page for a user with no workspace', function () {
+    $user = User::factory()->create();
+
+    $foreign = Workspace::factory()->withMember(User::factory()->create(), WorkspaceRole::Owner)->create();
+    Project::factory()->for($foreign)->create(['name' => 'Foreign Project']);
+
+    $this->actingAs($user);
+
+    $this->get(route('projects.index'))
+        ->assertOk()
+        ->assertSee('You are not a member of any workspace yet')
+        ->assertDontSee('Foreign Project')
+        ->assertDontSee('New project');
+
+    $this->get(route('dashboard'))
+        ->assertDontSee('href="'.route('projects.index').'"', false);
+});

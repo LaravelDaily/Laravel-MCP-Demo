@@ -35,10 +35,14 @@ class Index extends Component
      */
     public ?int $deletingId = null;
 
+    /**
+     * Resolve the selected workspace, or null when the user has no
+     * memberships and the page shows its empty state.
+     */
     #[Computed]
-    public function workspace(): Workspace
+    public function workspace(): ?Workspace
     {
-        return app(WorkspaceContext::class)->currentOrFail();
+        return app(WorkspaceContext::class)->current();
     }
 
     /**
@@ -61,7 +65,9 @@ class Index extends Component
     #[Computed]
     public function canManageProjects(): bool
     {
-        return auth()->user()->can('create', [Project::class, $this->workspace()]);
+        $workspace = $this->workspace();
+
+        return $workspace !== null && auth()->user()->can('create', [Project::class, $workspace]);
     }
 
     public function startCreating(): void
@@ -107,7 +113,7 @@ class Index extends Component
 
             Flux::toast(variant: 'success', text: __('Project updated.'));
         } else {
-            $workspace = $this->workspace();
+            $workspace = $context->currentOrFail();
 
             $this->authorize('create', [Project::class, $workspace]);
 
