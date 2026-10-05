@@ -2,9 +2,13 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -24,6 +28,22 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureRateLimiting();
+    }
+
+    /**
+     * Limit MCP requests per authenticated user. The key is the user alone,
+     * not the workspace or token, so every workspace endpoint and every
+     * token of one user share a single budget.
+     */
+    protected function configureRateLimiting(): void
+    {
+        RateLimiter::for('mcp', function (Request $request): Limit {
+            $user = $request->user();
+
+            return Limit::perMinute(config()->integer('teamboard.mcp_rate_limit_per_minute'))
+                ->by($user instanceof User ? 'user:'.$user->id : 'ip:'.$request->ip());
+        });
     }
 
     /**

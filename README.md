@@ -72,6 +72,8 @@ Log in and open **Settings → MCP access** (`/settings/mcp-access`). Create a n
 
 The MCP endpoint is `https://teamboard.test/mcp/workspaces/{slug}`; demo slugs are `acme`, `sandbox`, and `globex`. Send `Authorization: Bearer <token>` on every request. Browser sessions are not accepted for MCP authentication. Identity comes from Sanctum, membership controls workspace access, and existing policies control operations; token abilities do not represent roles. The URL selects the workspace independently of the browser switcher. Invalid tokens receive 401; unknown or inaccessible workspace slugs receive 404.
 
+MCP requests are rate limited per authenticated user: by default 60 JSON-RPC requests per minute, shared across every workspace URL and every token of that user, and applied to all methods including `initialize` and `tools/list`. Authentication runs first, so requests with missing or invalid tokens receive 401 and do not use anyone's budget. When the budget is exhausted the endpoint returns HTTP 429 with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` headers, and the rejected request is not executed. Set `TEAMBOARD_MCP_RATE_LIMIT` in `.env` (config key `teamboard.mcp_rate_limit_per_minute`) to change the limit, for example `TEAMBOARD_MCP_RATE_LIMIT=5` to demonstrate a 429; run `php artisan config:clear` afterwards if configuration is cached. Counters use the default cache store (`CACHE_STORE=database` locally), so no Redis or other distributed cache is required.
+
 The read surface is available to owners, members, and viewers. Each tool operates only in the URL-selected workspace:
 
 | Tool | Inputs beyond pagination | Result |
