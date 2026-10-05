@@ -7,10 +7,10 @@ use App\Models\Project;
 use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
-use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
-use RuntimeException;
 
 class WorkspaceContext
 {
@@ -93,11 +93,14 @@ class WorkspaceContext
     }
 
     /**
-     * Resolve the current workspace or fail when the user has none.
+     * Resolve the current workspace, or fail with a not-found error when the
+     * user has none.
+     *
+     * @throws ModelNotFoundException<Workspace>
      */
     public function currentOrFail(): Workspace
     {
-        return $this->current() ?? throw new RuntimeException('The user has no current workspace.');
+        return $this->current() ?? throw (new ModelNotFoundException)->setModel(Workspace::class);
     }
 
     /**
@@ -123,20 +126,23 @@ class WorkspaceContext
 
     /**
      * Switch the browser selection to a workspace the current user belongs
-     * to. A foreign selection is rejected and never stored.
+     * to. A foreign or missing workspace is rejected as not found and never
+     * stored, so the response does not reveal whether it exists.
+     *
+     * @throws ModelNotFoundException<Workspace>
      */
     public function switchTo(int $workspaceId): Workspace
     {
         $user = auth()->user();
 
         if (! $user instanceof User) {
-            throw new AuthorizationException('You must be authenticated to select a workspace.');
+            throw new AuthenticationException;
         }
 
         $workspace = $this->accessibleWorkspace($user, $workspaceId);
 
         if ($workspace === null) {
-            throw new AuthorizationException('You do not belong to the selected workspace.');
+            throw (new ModelNotFoundException)->setModel(Workspace::class, [$workspaceId]);
         }
 
         session([self::SESSION_KEY => $workspace->id]);
@@ -162,14 +168,20 @@ class WorkspaceContext
      * Set the workspace for the current request lifecycle, for request
      * adapters such as the MCP endpoint that resolve the workspace from
      * their own URL. The user's membership is validated here so callers
-     * cannot inject a foreign workspace.
+     * cannot inject a foreign workspace; one is rejected as not found.
+     *
+     * @throws ModelNotFoundException<Workspace>
      */
     public function setExplicitWorkspace(Workspace $workspace): Workspace
     {
         $user = auth()->user();
 
-        if (! $user instanceof User || ! $user->belongsToWorkspace($workspace)) {
-            throw new AuthorizationException('You do not belong to the selected workspace.');
+        if (! $user instanceof User) {
+            throw new AuthenticationException;
+        }
+
+        if (! $user->belongsToWorkspace($workspace)) {
+            throw (new ModelNotFoundException)->setModel(Workspace::class, [$workspace->id]);
         }
 
         request()->attributes->set(self::EXPLICIT_WORKSPACE_ATTRIBUTE, $workspace);

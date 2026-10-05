@@ -6,7 +6,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Workspaces\WorkspaceContext;
-use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -61,8 +61,11 @@ test('has no current workspace when the user has no memberships', function () {
 
     $this->actingAs($user);
 
-    expect(app(WorkspaceContext::class)->current())->toBeNull()
-        ->and(session(WorkspaceContext::SESSION_KEY))->toBeNull();
+    $context = app(WorkspaceContext::class);
+
+    expect($context->current())->toBeNull()
+        ->and(session(WorkspaceContext::SESSION_KEY))->toBeNull()
+        ->and(fn () => $context->projects())->toThrow(ModelNotFoundException::class);
 });
 
 test('rejects selection of a workspace the user does not belong to', function () {
@@ -74,8 +77,10 @@ test('rejects selection of a workspace the user does not belong to', function ()
     $this->actingAs($user);
     session([WorkspaceContext::SESSION_KEY => $own->id]);
 
-    expect(fn () => app(WorkspaceContext::class)->switchTo($foreign->id))
-        ->toThrow(AuthorizationException::class)
+    $context = app(WorkspaceContext::class);
+
+    expect(fn () => $context->switchTo($foreign->id))->toThrow(ModelNotFoundException::class)
+        ->and(fn () => $context->switchTo($foreign->id + 1000))->toThrow(ModelNotFoundException::class)
         ->and(session(WorkspaceContext::SESSION_KEY))->toBe($own->id);
 });
 
@@ -148,7 +153,7 @@ test('rejects an explicit workspace the user does not belong to', function () {
     $this->actingAs($user);
     $context = app(WorkspaceContext::class);
 
-    expect(fn () => $context->setExplicitWorkspace($foreign))->toThrow(AuthorizationException::class)
+    expect(fn () => $context->setExplicitWorkspace($foreign))->toThrow(ModelNotFoundException::class)
         ->and($context->current()->id)->toBe($own->id);
 });
 
