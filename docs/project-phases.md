@@ -57,7 +57,7 @@ Keep the existing `users` table and authentication model. Add:
 | --- | --- |
 | `workspaces` | `id`, `name`, unique `slug`, timestamps |
 | `workspace_user` | `workspace_id`, `user_id`, `role`, timestamps; unique workspace/user pair; foreign keys |
-| `projects` | `id`, `workspace_id`, `name`, nullable `description`, nullable text `instructions`, timestamps |
+| `projects` | `id`, `workspace_id`, `name`, nullable text `description`, nullable text `instructions`, timestamps |
 | `tasks` | `id`, `project_id`, nullable `assignee_id` referencing users, `title`, nullable text `description`, `status` default `todo`, `priority` default `medium`, nullable date `due_date`, timestamps |
 | `comments` | `id`, `task_id`, `user_id` referencing the author, text `body`, timestamps |
 
@@ -72,8 +72,8 @@ Add useful factories for Workspace, Project, Task, and Comment. Keep UserFactory
 Create a small request-scoped workspace context, with a clear way to obtain the current workspace and its scoped projects/tasks. Do not use a global singleton that retains user/workspace state across requests.
 
 - Web: store selected workspace ID in the session. With no selection, choose the user's first membership ordered by workspace ID. A stale or now-inaccessible selection is cleared and falls back to the first remaining membership. No memberships means no current workspace.
-- Switching: accept only a workspace the current user belongs to. Reject an explicit foreign selection; never save it in the session.
-- MCP extension seam: allow a later request adapter to set a validated explicit workspace. MCP must never derive its workspace from the browser's selected session value.
+- Switching: accept only a workspace the current user belongs to. Reject an explicit foreign selection as not found (404), with the same error as a missing workspace; never save it in the session.
+- MCP extension seam: allow a later request adapter to set a validated explicit workspace. MCP must never derive its workspace from the browser's selected session value. The explicit workspace lives only for the current request: do not keep it in Laravel's `Context` facade, a container singleton, or any state that survives to another request or a queued job. A non-member workspace is rejected as not found.
 - Queries: workspace context restricts projects and tasks to the selected workspace, including when the user has another valid membership elsewhere.
 
 ### Authorization matrix
@@ -112,7 +112,7 @@ Acme projects and tasks:
 
 Include a mix of all task statuses and priorities, tasks assigned to Alice/Bob, an unassigned task, comments, a past-due unfinished task, a future-due task, and a completed task with a past due date. Calculate demo due dates relative to seed execution so the review demonstration stays useful. Add project instructions, such as requiring acceptance criteria and reproduction steps for bugs.
 
-Give Globex and Sandbox distinct projects/tasks with recognizable titles to reveal accidental leakage. Keep fixtures predictable after a fresh local migrate-and-seed; do not commit secrets or generated tokens. Do not automatically run destructive resets against an existing database.
+Give Globex and Sandbox distinct projects/tasks with recognizable titles to reveal accidental leakage. Keep fixtures predictable after a fresh local migrate-and-seed; do not commit secrets or generated tokens. Do not automatically run destructive resets against an existing database; seeding again when the demo data exists is a no-op with a warning.
 
 ### Expected automated tests
 
