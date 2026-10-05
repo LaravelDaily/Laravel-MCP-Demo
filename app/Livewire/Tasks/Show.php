@@ -17,6 +17,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -29,6 +30,7 @@ class Show extends Component
      * workspace context on every request and before every mutation, so a
      * foreign or stale ID is rejected as not found.
      */
+    #[Locked]
     public int $taskId;
 
     public string $title = '';

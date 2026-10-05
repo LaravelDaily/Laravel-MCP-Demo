@@ -5,6 +5,7 @@ use App\Actions\Tasks\UpdateTaskDetails;
 use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
 use App\Enums\WorkspaceRole;
+use App\Livewire\Projects\Index as ProjectsIndex;
 use App\Livewire\Projects\Show as ProjectShow;
 use App\Livewire\Tasks\Show as TaskShow;
 use App\Models\Comment;
@@ -13,6 +14,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Validation\ValidationException;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 
 function workspaceWithMember(User $user, WorkspaceRole $role): Workspace
@@ -393,41 +395,32 @@ test('rejects forged record IDs during Livewire mutations', function () {
 
     $this->actingAs($owner);
 
-    // A forged Livewire payload sends the record ID and the action call in
-    // one request; each mutation below submits a foreign ID that way.
-    $call = fn (string $method) => [['method' => $method, 'params' => [], 'path' => '']];
+    // A forged Livewire payload changes the locked record ID and calls the
+    // action in the same request; the lock rejects it before the action runs.
+    $forge = fn (string $method, array $updates) => fn () => Livewire::test(TaskShow::class, ['taskId' => $task->id])
+        ->update([['method' => $method, 'params' => [], 'path' => '']], [...$updates, 'taskId' => $foreignTask->id]);
 
-    Livewire::test(ProjectShow::class, ['projectId' => $project->id])
-        ->update(
-            calls: $call('createTask'),
-            updates: ['title' => 'Forged task', 'projectId' => $foreignProject->id],
-        )
-        ->assertNotFound();
+    expect(fn () => Livewire::test(ProjectShow::class, ['projectId' => $project->id])
+        ->update([['method' => 'createTask', 'params' => [], 'path' => '']], ['title' => 'Forged task', 'projectId' => $foreignProject->id]))
+        ->toThrow(CannotUpdateLockedPropertyException::class)
+        ->and($forge('saveDetails', ['title' => 'Forged rename']))->toThrow(CannotUpdateLockedPropertyException::class)
+        ->and($forge('changeStatus', ['status' => 'done']))->toThrow(CannotUpdateLockedPropertyException::class)
+        ->and($forge('assign', ['assignee_id' => (string) $owner->id]))->toThrow(CannotUpdateLockedPropertyException::class)
+        ->and($forge('addComment', ['body' => 'Forged comment']))->toThrow(CannotUpdateLockedPropertyException::class)
+        ->and($forge('delete', []))->toThrow(CannotUpdateLockedPropertyException::class);
 
-    Livewire::test(TaskShow::class, ['taskId' => $task->id])
-        ->update($call('saveDetails'), ['title' => 'Forged rename', 'taskId' => $foreignTask->id])
-        ->assertNotFound();
-
-    Livewire::test(TaskShow::class, ['taskId' => $task->id])
-        ->update($call('changeStatus'), ['status' => 'done', 'taskId' => $foreignTask->id])
-        ->assertNotFound();
-
-    Livewire::test(TaskShow::class, ['taskId' => $task->id])
-        ->update($call('assign'), ['assignee_id' => (string) $owner->id, 'taskId' => $foreignTask->id])
-        ->assertNotFound();
-
-    Livewire::test(TaskShow::class, ['taskId' => $task->id])
-        ->update($call('addComment'), ['body' => 'Forged comment', 'taskId' => $foreignTask->id])
-        ->assertNotFound();
-
-    Livewire::test(TaskShow::class, ['taskId' => $task->id])
-        ->update($call('delete'), ['taskId' => $foreignTask->id])
-        ->assertNotFound();
+    // Foreign IDs that arrive legitimately, as a route parameter or an action
+    // argument, are resolved through the workspace context and not found.
+    Livewire::test(TaskShow::class, ['taskId' => $foreignTask->id])->assertNotFound();
+    Livewire::test(ProjectShow::class, ['projectId' => $foreignProject->id])->assertNotFound();
+    Livewire::test(ProjectsIndex::class)->call('startEditing', $foreignProject->id)->assertNotFound();
+    Livewire::test(ProjectsIndex::class)->call('confirmDelete', $foreignProject->id)->call('delete')->assertNotFound();
 
     expect($foreignTask->fresh()->title)->toBe('Foreign task')
         ->and($foreignTask->fresh()->status)->toBe(TaskStatus::Todo)
         ->and($task->fresh()->title)->toBe('Own task');
 
+    $this->assertModelExists($foreignProject);
     $this->assertDatabaseCount('tasks', 2);
     $this->assertDatabaseCount('comments', 0);
 });

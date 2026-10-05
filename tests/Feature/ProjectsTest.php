@@ -75,13 +75,13 @@ test('forbids project mutations by members and viewers', function (WorkspaceRole
         ->assertForbidden();
 
     Livewire::test(ProjectsIndex::class)
-        ->set('editingId', $project->id)
+        ->call('startEditing', $project->id)
         ->set('name', 'Forged rename')
         ->call('save')
         ->assertForbidden();
 
     Livewire::test(ProjectsIndex::class)
-        ->set('deletingId', $project->id)
+        ->call('confirmDelete', $project->id)
         ->call('delete')
         ->assertForbidden();
 

@@ -10,6 +10,7 @@ use Flux\Flux;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -28,11 +29,13 @@ class Index extends Component
     /**
      * ID of the project being edited, null when the form creates a project.
      */
+    #[Locked]
     public ?int $editingId = null;
 
     /**
      * ID of the project awaiting delete confirmation.
      */
+    #[Locked]
     public ?int $deletingId = null;
 
     /**
