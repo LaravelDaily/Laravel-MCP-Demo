@@ -4,7 +4,10 @@ namespace App\Mcp\Tools;
 
 use App\Actions\Tasks\ChangeTaskStatus;
 use App\Enums\TaskStatus;
+use App\Models\McpAuditLog;
+use App\Models\Task;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\DB;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
@@ -32,7 +35,12 @@ class MoveTaskTool extends TeamBoardTool
     {
         $arguments = $this->validateArguments($request, ['task_id' => ['required', 'integer:strict', 'min:1']] + $this->taskStatusRules());
         $task = $this->context->task($arguments['task_id']);
-        $task = app(ChangeTaskStatus::class)($this->actor($request), $task, $arguments['status']);
+        $task = DB::transaction(function () use ($request, $task, $arguments): Task {
+            $task = app(ChangeTaskStatus::class)($this->actor($request), $task, $arguments['status']);
+            $this->recordAudit($request, McpAuditLog::ENTITY_TASK, $task->id, 'Moved '.$this->auditTaskLabel($task->id, $task->title).' to '.$task->status->value.'.');
+
+            return $task;
+        });
         $task->load(['project', 'assignee']);
 
         return Response::structured($this->taskSummary($task));

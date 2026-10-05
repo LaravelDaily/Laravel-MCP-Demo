@@ -25,6 +25,7 @@ $matrix = [
     'create comment' => ['create', 'new-comment', [WorkspaceRole::Owner, WorkspaceRole::Member]],
     'contribute to workspace tasks' => ['contribute', 'workspace', [WorkspaceRole::Owner, WorkspaceRole::Member]],
     'delete workspace tasks' => ['deleteTasks', 'workspace', [WorkspaceRole::Owner]],
+    'view MCP audit page' => ['viewMcpAudit', 'workspace', [WorkspaceRole::Owner]],
 ];
 
 $cases = [];

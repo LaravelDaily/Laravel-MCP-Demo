@@ -3,7 +3,10 @@
 namespace App\Mcp\Tools;
 
 use App\Actions\Tasks\AddComment;
+use App\Models\Comment;
+use App\Models\McpAuditLog;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\DB;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
@@ -31,7 +34,12 @@ class AddCommentTool extends TeamBoardTool
     {
         $arguments = $this->validateArguments($request, ['task_id' => ['required', 'integer:strict', 'min:1']] + $this->commentRules());
         $task = $this->context->task($arguments['task_id']);
-        $comment = app(AddComment::class)($this->actor($request), $task, $arguments['body']);
+        $comment = DB::transaction(function () use ($request, $task, $arguments): Comment {
+            $comment = app(AddComment::class)($this->actor($request), $task, $arguments['body']);
+            $this->recordAudit($request, McpAuditLog::ENTITY_COMMENT, $comment->id, 'Commented on '.$this->auditTaskLabel($task->id, $task->title).'.');
+
+            return $comment;
+        });
         $comment->load('author');
 
         return Response::structured([

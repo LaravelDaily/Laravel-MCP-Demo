@@ -3,7 +3,11 @@
 namespace App\Mcp\Tools;
 
 use App\Actions\Tasks\CreateTask;
+use App\Models\McpAuditLog;
+use App\Models\Task;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -34,7 +38,12 @@ class CreateTaskTool extends TeamBoardTool
         $arguments = $this->validateArguments($request, ['project_id' => ['required', 'integer:strict', 'min:1']] + $rules);
         $project = $this->context->project($arguments['project_id']);
         unset($arguments['project_id']);
-        $task = app(CreateTask::class)($this->actor($request), $project, $arguments);
+        $task = DB::transaction(function () use ($request, $project, $arguments): Task {
+            $task = app(CreateTask::class)($this->actor($request), $project, $arguments);
+            $this->recordAudit($request, McpAuditLog::ENTITY_TASK, $task->id, 'Created '.$this->auditTaskLabel($task->id, $task->title).' in project "'.Str::limit($project->name, 80).'".');
+
+            return $task;
+        });
 
         return $this->taskDetails($task);
     }

@@ -59,4 +59,12 @@ class Workspace extends Model
     {
         return $this->hasManyThrough(Task::class, Project::class);
     }
+
+    /**
+     * @return HasMany<McpAuditLog, $this>
+     */
+    public function mcpAuditLogs(): HasMany
+    {
+        return $this->hasMany(McpAuditLog::class);
+    }
 }

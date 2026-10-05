@@ -3,7 +3,10 @@
 namespace App\Mcp\Tools;
 
 use App\Actions\Tasks\UpdateTaskDetails;
+use App\Models\McpAuditLog;
+use App\Models\Task;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\DB;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -31,7 +34,12 @@ class UpdateTaskTool extends TeamBoardTool
         $arguments = $this->validateArguments($request, ['task_id' => ['required', 'integer:strict', 'min:1']] + $this->taskUpdateRules());
         $task = $this->context->task($arguments['task_id']);
         unset($arguments['task_id']);
-        $task = app(UpdateTaskDetails::class)($this->actor($request), $task, $arguments);
+        $task = DB::transaction(function () use ($request, $task, $arguments): Task {
+            $task = app(UpdateTaskDetails::class)($this->actor($request), $task, $arguments);
+            $this->recordAudit($request, McpAuditLog::ENTITY_TASK, $task->id, 'Updated '.$this->auditTaskLabel($task->id, $task->title).': '.implode(', ', array_keys($arguments)).'.');
+
+            return $task;
+        });
 
         return $this->taskDetails($task);
     }

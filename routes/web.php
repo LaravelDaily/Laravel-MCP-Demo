@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Dashboard;
+use App\Livewire\McpAudit\Index as McpAuditIndex;
 use App\Livewire\Projects\Index as ProjectsIndex;
 use App\Livewire\Projects\Show as ProjectShow;
 use App\Livewire\Tasks\Show as TaskShow;
@@ -16,6 +17,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('projects/{projectId}', ProjectShow::class)->whereNumber('projectId')->name('projects.show');
 
     Route::livewire('tasks/{taskId}', TaskShow::class)->whereNumber('taskId')->name('tasks.show');
+
+    Route::livewire('mcp-audit', McpAuditIndex::class)->name('mcp-audit.index');
 });
 
 require __DIR__.'/settings.php';

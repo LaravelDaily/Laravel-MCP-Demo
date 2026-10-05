@@ -34,6 +34,7 @@ test('returns 429 after the per-user MCP request limit is exhausted', function (
         ->assertHeader('X-RateLimit-Remaining', '0')
         ->assertJsonMissingPath('result');
     expect(Task::count())->toBe(0);
+    $this->assertDatabaseCount('mcp_audit_logs', 0);
 });
 
 test('shares a users rate limit across workspace connections', function () {

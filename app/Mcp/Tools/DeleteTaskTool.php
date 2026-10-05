@@ -3,7 +3,9 @@
 namespace App\Mcp\Tools;
 
 use App\Actions\Tasks\DeleteTask;
+use App\Models\McpAuditLog;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\DB;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
@@ -32,7 +34,10 @@ class DeleteTaskTool extends TeamBoardTool
         $arguments = $this->validateArguments($request, ['task_id' => ['required', 'integer:strict', 'min:1']]);
         $task = $this->context->task($arguments['task_id']);
         $deletedTask = ['id' => $task->id, 'title' => $task->title];
-        app(DeleteTask::class)($this->actor($request), $task);
+        DB::transaction(function () use ($request, $task, $deletedTask): void {
+            app(DeleteTask::class)($this->actor($request), $task);
+            $this->recordAudit($request, McpAuditLog::ENTITY_TASK, $deletedTask['id'], 'Deleted '.$this->auditTaskLabel($deletedTask['id'], $deletedTask['title']).' and its comments.');
+        });
 
         return Response::structured(['deleted' => true, 'task' => $deletedTask]);
     }

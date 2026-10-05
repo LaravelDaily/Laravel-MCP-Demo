@@ -5,6 +5,7 @@ namespace App\Mcp\Tools;
 use App\Concerns\TaskValidationRules;
 use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
+use App\Models\McpAuditLog;
 use App\Models\Task;
 use App\Models\User;
 use App\Workspaces\WorkspaceContext;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\JsonSchema\Types\StringType;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -116,6 +118,33 @@ abstract class TeamBoardTool extends Tool
         $workspace = $this->context->current();
 
         return $actor instanceof User && $workspace !== null && Gate::forUser($actor)->allows($ability, $workspace);
+    }
+
+    /**
+     * Record a successful MCP mutation for the actor and endpoint workspace.
+     * Write tools call this inside the same database transaction as the
+     * shared task action, so a failed audit insert rolls the mutation back.
+     * Summaries name the task but never contain descriptions, comment
+     * bodies, tokens, or request payloads.
+     */
+    protected function recordAudit(Request $request, string $entityType, int $entityId, string $summary): void
+    {
+        McpAuditLog::create([
+            'user_id' => $this->actor($request)->id,
+            'workspace_id' => $this->context->currentOrFail()->id,
+            'tool' => $this->name(),
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
+            'summary' => $summary,
+        ]);
+    }
+
+    /**
+     * Identify a task in an audit summary by ID and shortened title.
+     */
+    protected function auditTaskLabel(int $taskId, string $title): string
+    {
+        return 'task #'.$taskId.' "'.Str::limit($title, 80).'"';
     }
 
     protected function taskDetails(Task $task): ResponseFactory

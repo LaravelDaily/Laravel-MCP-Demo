@@ -3,7 +3,11 @@
 namespace App\Mcp\Tools;
 
 use App\Actions\Tasks\AssignTask;
+use App\Models\McpAuditLog;
+use App\Models\Task;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
@@ -33,8 +37,16 @@ class AssignTaskTool extends TeamBoardTool
         $rules['assignee_id'] = ['present', ...$rules['assignee_id'], 'integer:strict', 'min:1'];
         $arguments = $this->validateArguments($request, ['task_id' => ['required', 'integer:strict', 'min:1']] + $rules);
         $task = $this->context->task($arguments['task_id']);
-        $task = app(AssignTask::class)($this->actor($request), $task, $arguments['assignee_id']);
-        $task->load(['project', 'assignee']);
+        $task = DB::transaction(function () use ($request, $task, $arguments): Task {
+            $task = app(AssignTask::class)($this->actor($request), $task, $arguments['assignee_id']);
+            $task->load(['project', 'assignee']);
+            $label = $this->auditTaskLabel($task->id, $task->title);
+            $this->recordAudit($request, McpAuditLog::ENTITY_TASK, $task->id, $task->assignee === null
+                ? 'Unassigned '.$label.'.'
+                : 'Assigned '.$label.' to '.Str::limit($task->assignee->name, 80).'.');
+
+            return $task;
+        });
 
         return Response::structured($this->taskSummary($task));
     }

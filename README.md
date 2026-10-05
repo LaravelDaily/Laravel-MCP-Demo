@@ -155,6 +155,12 @@ unset TEAMBOARD_TOKEN
 
 The `NODE_EXTRA_CA_CERTS` example above is the macOS Herd CA path verified here; adjust it for your environment before running Node clients. Keep TLS verification enabled. Automated transport tests do not substitute for that client check.
 
+### MCP audit log
+
+Every successful MCP `create_task`, `update_task`, `assign_task`, `move_task`, `add_comment`, and `delete_task` call writes one row to `mcp_audit_logs` in the same database transaction as the change: if the audit insert fails, the change is rolled back. A row stores the actor, the URL-selected workspace, the exact tool name, an entity reference (`comment` for `add_comment`, `task` otherwise), and a short summary such as `Moved task #12 "Fix mobile navigation" to in_progress.` It never stores tokens, request payloads, descriptions, or comment bodies. Entity references are plain IDs, so history remains after a task and its comments are deleted. Failed calls, reads, resources, prompts, and changes made in the web UI are not recorded. Repeating a successful call records another entry.
+
+Workspace owners see **MCP audit log** in the sidebar (`/mcp-audit`): paginated entries for the selected workspace, newest first, with time (UTC), tool, actor, entity, and summary. Members and viewers receive 403.
+
 ### Project instructions resource and review prompt
 
 TeamBoard also exposes one resource template and one prompt. Both are available to owners, members, and viewers, operate only in the URL-selected workspace, and never change data.

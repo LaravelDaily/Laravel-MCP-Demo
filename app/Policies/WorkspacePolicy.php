@@ -36,4 +36,13 @@ class WorkspacePolicy
     {
         return $user->roleIn($workspace) === WorkspaceRole::Owner;
     }
+
+    /**
+     * Determine whether the user may view the workspace's MCP audit page.
+     * Only owners can review the history of agent mutations.
+     */
+    public function viewMcpAudit(User $user, Workspace $workspace): bool
+    {
+        return $user->roleIn($workspace) === WorkspaceRole::Owner;
+    }
 }
