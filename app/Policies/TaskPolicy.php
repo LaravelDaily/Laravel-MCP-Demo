@@ -63,8 +63,10 @@ class TaskPolicy
     /**
      * Determine whether the user can delete the task.
      */
-    public function delete(User $user, Task $task): bool
+    public function delete(User $user, Task $task): Response
     {
-        return $user->roleIn($task->project->workspace_id) === WorkspaceRole::Owner;
+        return $user->roleIn($task->project->workspace_id) === WorkspaceRole::Owner
+            ? Response::allow()
+            : Response::deny('Your workspace role cannot delete tasks.');
     }
 }

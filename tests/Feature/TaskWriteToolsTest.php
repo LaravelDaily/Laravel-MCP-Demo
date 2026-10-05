@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Tasks\DeleteTask;
 use App\Enums\TaskPriority;
 use App\Enums\WorkspaceRole;
 use App\Livewire\Tasks\Show as TaskShow;
@@ -7,6 +8,7 @@ use App\Mcp\Servers\TeamBoardServer;
 use App\Mcp\Tools\AddCommentTool;
 use App\Mcp\Tools\AssignTaskTool;
 use App\Mcp\Tools\CreateTaskTool;
+use App\Mcp\Tools\DeleteTaskTool;
 use App\Mcp\Tools\MoveTaskTool;
 use App\Mcp\Tools\UpdateTaskTool;
 use App\Models\Comment;
@@ -15,9 +17,11 @@ use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Workspaces\WorkspaceContext;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
+use Laravel\Mcp\Request;
 use Laravel\Mcp\Server\Testing\TestResponse;
 use Livewire\Livewire;
 
@@ -40,6 +44,15 @@ dataset('ordinary write tools', [
     'assign_task' => [AssignTaskTool::class, 'assign_task', fn (Task $task): array => ['task_id' => $task->id, 'assignee_id' => null]],
     'move_task' => [MoveTaskTool::class, 'move_task', fn (Task $task): array => ['task_id' => $task->id, 'status' => 'done']],
     'add_comment' => [AddCommentTool::class, 'add_comment', fn (Task $task): array => ['task_id' => $task->id, 'body' => 'New comment']],
+]);
+
+dataset('write tools', [
+    'create_task' => [CreateTaskTool::class, 'create_task', fn (Task $task): array => ['project_id' => $task->project_id, 'title' => 'New task']],
+    'update_task' => [UpdateTaskTool::class, 'update_task', fn (Task $task): array => ['task_id' => $task->id, 'title' => 'Changed task']],
+    'assign_task' => [AssignTaskTool::class, 'assign_task', fn (Task $task): array => ['task_id' => $task->id, 'assignee_id' => null]],
+    'move_task' => [MoveTaskTool::class, 'move_task', fn (Task $task): array => ['task_id' => $task->id, 'status' => 'done']],
+    'add_comment' => [AddCommentTool::class, 'add_comment', fn (Task $task): array => ['task_id' => $task->id, 'body' => 'New comment']],
+    'delete_task' => [DeleteTaskTool::class, 'delete_task', fn (Task $task): array => ['task_id' => $task->id]],
 ]);
 
 test('creates a task in the selected project for owners and members', function (WorkspaceRole $role) {
@@ -235,7 +248,7 @@ test('rejects status assignment and ownership changes through update_task', func
     expect($task->fresh()->getAttributes())->toBe($before);
 })->with(['status', 'assignee_id', 'project_id']);
 
-test('rejects actor and workspace arguments together in ordinary writes', function (string $tool, string $name, Closure $arguments) {
+test('rejects actor and workspace arguments together in every write', function (string $tool, string $name, Closure $arguments) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $task = Task::factory()->for(Project::factory()->for($workspace))->create();
@@ -247,32 +260,30 @@ test('rejects actor and workspace arguments together in ordinary writes', functi
     expect($task->fresh()->getAttributes())->toBe($before);
     expect(Task::count())->toBe(1);
     expect(Comment::count())->toBe(0);
-})->with('ordinary write tools');
+})->with('write tools');
 
 test('forbids viewer calls to every write operation', function (string $tool, string $name, Closure $arguments) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
     $task = Task::factory()->for(Project::factory()->for($workspace))->create();
     $before = $task->fresh()->getAttributes();
-    $token = $user->createToken('Viewer write boundary')->plainTextToken;
+    $this->actingAs($user);
+    app(WorkspaceContext::class)->setExplicitWorkspace($workspace);
 
-    $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
-        'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => ['name' => $name, 'arguments' => $arguments($task)],
-    ], ['Authorization' => 'Bearer '.$token]);
+    $call = fn () => app($tool)->handle(new Request($arguments($task)));
 
-    $response->assertOk()
-        ->assertJsonPath('result.isError', true)
-        ->assertJsonPath('result.content.0.text', match ($name) {
-            'create_task' => 'Your workspace role cannot create tasks.',
-            'update_task' => 'Your workspace role cannot update tasks.',
-            'assign_task' => 'Your workspace role cannot assign tasks.',
-            'move_task' => 'Your workspace role cannot change task status.',
-            'add_comment' => 'Your workspace role cannot add comments.',
-        });
+    expect($call)->toThrow(AuthorizationException::class, match ($name) {
+        'create_task' => 'Your workspace role cannot create tasks.',
+        'update_task' => 'Your workspace role cannot update tasks.',
+        'assign_task' => 'Your workspace role cannot assign tasks.',
+        'move_task' => 'Your workspace role cannot change task status.',
+        'add_comment' => 'Your workspace role cannot add comments.',
+        'delete_task' => 'Your workspace role cannot delete tasks.',
+    });
     expect($task->fresh()->getAttributes())->toBe($before);
     expect(Task::count())->toBe(1);
     expect(Comment::count())->toBe(0);
-})->with('ordinary write tools');
+})->with('write tools');
 
 test('rejects foreign and missing write records without disclosing existence', function (string $tool, string $name, Closure $arguments, Closure $otherWorkspace) {
     $user = User::factory()->create();
@@ -301,7 +312,7 @@ test('rejects foreign and missing write records without disclosing existence', f
     expect($foreign->fresh()->getAttributes())->toBe($before);
     expect(Task::count())->toBe(1);
     expect(Comment::count())->toBe(0);
-})->with('ordinary write tools')->with([
+})->with('write tools')->with([
     'non-member workspace' => [fn (User $user): Workspace => Workspace::factory()->create()],
     'accessible inactive workspace' => [fn (User $user): Workspace => Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create()],
 ]);
@@ -372,7 +383,7 @@ test('advertises metadata mutation schemas and accurate safety annotations', fun
     ], ['Authorization' => 'Bearer '.$token]);
 
     $response->assertOk()
-        ->assertJsonCount(11, 'result.tools')
+        ->assertJsonCount(12, 'result.tools')
         ->assertJsonPath('result.tools.'.$index.'.name', $name)
         ->assertJsonPath('result.tools.'.$index.'.inputSchema.required', $required)
         ->assertJsonPath('result.tools.'.$index.'.inputSchema.additionalProperties', false)
@@ -631,9 +642,9 @@ test('assigns moves and comments through bearer HTTP with matching structured an
     expect(Comment::count())->toBe(1);
 });
 
-test('rejects malformed task IDs in ordinary writes without mutations', function (string $tool, array $arguments, mixed $taskId, string $message) {
+test('rejects malformed task IDs in task writes without mutations', function (string $tool, array $arguments, mixed $taskId, string $message) {
     $user = User::factory()->create();
-    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create();
+    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $task = Task::factory()->for(Project::factory()->for($workspace))->create();
     $before = $task->fresh()->getAttributes();
 
@@ -646,8 +657,85 @@ test('rejects malformed task IDs in ordinary writes without mutations', function
     'assign' => [AssignTaskTool::class, ['assignee_id' => null]],
     'move' => [MoveTaskTool::class, ['status' => 'done']],
     'comment' => [AddCommentTool::class, ['body' => 'Rejected comment']],
+    'delete' => [DeleteTaskTool::class, []],
 ])->with([
     'null' => [null, 'The task id field is required.'],
     'string' => ['1', 'The task id field must be an integer.'],
     'zero' => [0, 'The task id field must be at least 1.'],
 ]);
+
+test('deletes tasks and comments only for owners', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $viewer = User::factory()->create();
+    $workspace = Workspace::factory()
+        ->withMember($owner, WorkspaceRole::Owner)
+        ->withMember($member, WorkspaceRole::Member)
+        ->withMember($viewer, WorkspaceRole::Viewer)
+        ->create();
+    $project = Project::factory()->for($workspace)->create();
+    $task = Task::factory()->for($project)->create(['title' => 'Owner deletes this']);
+    $comments = Comment::factory()->count(2)->for($task)->create();
+    $protected = Task::factory()->for($project)->create();
+    $protectedComment = Comment::factory()->for($protected)->create();
+    $before = $protected->fresh()->getAttributes();
+
+    $response = taskWriteAs($owner, $workspace, DeleteTaskTool::class, ['task_id' => $task->id]);
+    $memberDeletion = fn () => app(DeleteTask::class)($member, $protected);
+    $viewerDeletion = fn () => app(DeleteTask::class)($viewer, $protected);
+
+    $response->assertOk()->assertStructuredContent([
+        'deleted' => true,
+        'task' => ['id' => $task->id, 'title' => 'Owner deletes this'],
+    ]);
+    $this->assertModelMissing($task);
+    $comments->each(fn (Comment $comment) => $this->assertModelMissing($comment));
+    expect($memberDeletion)->toThrow(AuthorizationException::class, 'Your workspace role cannot delete tasks.');
+    expect($viewerDeletion)->toThrow(AuthorizationException::class, 'Your workspace role cannot delete tasks.');
+    expect($protected->fresh()->getAttributes())->toBe($before);
+    $this->assertModelExists($protectedComment);
+    expect(Task::count())->toBe(1);
+    expect(Comment::count())->toBe(1);
+});
+
+test('reports a repeated deletion as a missing record', function () {
+    $user = User::factory()->create();
+    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
+    $task = Task::factory()->for(Project::factory()->for($workspace))->create();
+    taskWriteAs($user, $workspace, DeleteTaskTool::class, ['task_id' => $task->id]);
+
+    $response = taskWriteAs($user, $workspace, DeleteTaskTool::class, ['task_id' => $task->id]);
+
+    $response->assertHasErrors(['The record was not found in the current workspace.']);
+    expect(Task::count())->toBe(0);
+});
+
+test('advertises mutation schemas and destructive deletion metadata', function () {
+    $user = User::factory()->create();
+    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
+    $token = $user->createToken('Deletion schema client')->plainTextToken;
+
+    $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
+        'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list',
+    ], ['Authorization' => 'Bearer '.$token]);
+
+    $response->assertOk()
+        ->assertJsonCount(12, 'result.tools')
+        ->assertJsonPath('result.tools.11.name', 'delete_task')
+        ->assertJsonPath('result.tools.11.inputSchema.required', ['task_id'])
+        ->assertJsonPath('result.tools.11.inputSchema.additionalProperties', false)
+        ->assertJsonPath('result.tools.11.inputSchema.properties.task_id.type', 'integer')
+        ->assertJsonPath('result.tools.11.inputSchema.properties.task_id.minimum', 1)
+        ->assertJsonPath('result.tools.11.outputSchema.additionalProperties', false)
+        ->assertJsonPath('result.tools.11.outputSchema.required', ['deleted', 'task'])
+        ->assertJsonPath('result.tools.11.outputSchema.properties.deleted.type', 'boolean')
+        ->assertJsonPath('result.tools.11.outputSchema.properties.task.required', ['id', 'title'])
+        ->assertJsonPath('result.tools.11.outputSchema.properties.task.additionalProperties', false)
+        ->assertJsonPath('result.tools.11.annotations.readOnlyHint', false)
+        ->assertJsonPath('result.tools.11.annotations.destructiveHint', true)
+        ->assertJsonPath('result.tools.11.annotations.idempotentHint', false)
+        ->assertJsonPath('result.tools.11.annotations.openWorldHint', false);
+    foreach (range(6, 10) as $index) {
+        $response->assertJsonPath('result.tools.'.$index.'.annotations.destructiveHint', false);
+    }
+});

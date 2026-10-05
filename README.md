@@ -87,7 +87,7 @@ Search strings are trimmed literal substrings of up to 200 characters. Search is
 
 All lists are ordered by ascending ID. `page` defaults to 1, `per_page` defaults to 25 and accepts 1–100. The structured response contains `data` and `meta: { page, per_page, total, last_page }`; pages past the end return empty data. Each task summary has only `id`, `title`, `project: { id, name }`, `status` (`todo`, `in_progress`, `done`), `priority` (`low`, `medium`, `high`), nullable `assignee: { id, name }`, and nullable `due_date` (`YYYY-MM-DD`). `get_task` returns comments as `id`, `body`, and `author: { id, name }`, ordered by creation time descending and then ID descending. Every tool supplies a matching JSON text fallback alongside structured content. Reads do not change domain records.
 
-Five write tools are also available:
+Six write tools are also available:
 
 | Tool | Inputs | Result |
 | --- | --- | --- |
@@ -96,10 +96,23 @@ Five write tools are also available:
 | `assign_task` | Required `task_id`, required nullable `assignee_id` | Task summary; any workspace member (including viewers) may be assigned, null unassigns |
 | `move_task` | Required `task_id`, `status` (`todo`, `in_progress`, `done`) | Task summary; any transition is allowed, including reopening completed tasks |
 | `add_comment` | Required `task_id`, `body` | `id`, `task_id`, trimmed `body`, `author: { id, name }` from authenticated identity |
+| `delete_task` | Required `task_id` | `deleted: true` and `task: { id, title }` captured before deletion; permanently deletes the task and its comments |
 
-Owners and members may write; viewer calls are denied by the shared policies and task actions. Discovery includes these tools for all workspace roles until role-specific registration is introduced in the permissions lesson. Supplied titles are trimmed and must be non-empty with at most 255 characters; descriptions accept up to 10,000 characters. Due dates use strict `YYYY-MM-DD`, including past dates. Creation may assign any member of the endpoint workspace, including a viewer, or leave the task unassigned. Explicit null clears description and due date on update; title and priority cannot be null. Update rejects status, assignee, and project changes. All five tools reject unsupported arguments and return safe workspace errors. Comment bodies are trimmed, required, and limited to 5,000 characters. Assignment requires an explicit assignee ID or null; omitting it is an error. Policy denials identify the operation your workspace role cannot perform. Creation and comments can duplicate on retry; no write tool promises idempotency or exactly-once execution. Safety annotations are advisory and do not guarantee a client confirmation dialog.
+Owners and members may create, update, assign, move, and comment; only owners may delete tasks. Supplied titles are trimmed and must be non-empty with at most 255 characters; descriptions accept up to 10,000 characters. Due dates use strict `YYYY-MM-DD`, including past dates. Creation may assign any member of the endpoint workspace, including a viewer, or leave the task unassigned. Explicit null clears description and due date on update; title and priority cannot be null. Update rejects status, assignee, and project changes. All six tools reject unsupported arguments and return safe workspace errors. Comment bodies are trimmed, required, and limited to 5,000 characters. Assignment requires an explicit assignee ID or null; omitting it is an error. Policy denials identify the operation your workspace role cannot perform. Creation and comments can duplicate on retry; no write tool promises idempotency or exactly-once execution. `delete_task` is marked destructive and not idempotent: deletion cannot be undone, and repeating it reports that the task was not found. Safety annotations are advisory and do not guarantee a client confirmation dialog.
 
-To try all five writes deliberately, ask Claude Code to use `list_projects` to find Website Redesign, then `create_task` with title "C09 test task". Keep the returned task ID. Use `update_task` to set its description and priority; use `list_workspace_members` to find Bob, then `assign_task` with his ID; use `move_task` to set `in_progress`; and use `add_comment` with body "C09 workflow checked". Finally use `get_task` to verify metadata, assignment, status, and comment author. You can also unassign with explicit null and reopen a done task. Delete only the test task through the normal owner UI when finished.
+Tool discovery follows your role in the URL-selected workspace, checked on every request:
+
+| Role | Tools listed |
+| --- | --- |
+| Owner | All twelve: six read tools, `create_task`, `update_task`, `assign_task`, `move_task`, `add_comment`, `delete_task` |
+| Member | Eleven: six read tools and the five writes above, without `delete_task` |
+| Viewer | Six read tools only |
+
+The same token can see different tool sets on different workspace URLs: Dana sees all twelve tools on `/acme` (owner) and only the six read tools on `/sandbox` (viewer). Hidden tools are a usability filter, not the security boundary: calling a hidden tool by name is rejected as an unknown tool, and every write still runs through the shared policies and task actions, so a guessed name cannot change data. Reconnect your client after a role change to refresh its tool list.
+
+To try the writes deliberately as Alice, ask Claude Code to use `list_projects` to find Website Redesign, then `create_task` with title "C10 test task". Keep the returned task ID. Use `update_task` to set its description and priority; use `list_workspace_members` to find Bob, then `assign_task` with his ID; use `move_task` to set `in_progress`; and use `add_comment` with body "C10 workflow checked". Use `get_task` to verify metadata, assignment, status, and comment author. You can also unassign with explicit null and reopen a done task. Finally use `delete_task` on that test task only, then confirm with `get_task` that it is no longer found.
+
+To see role-based discovery, connect a separate local server for each demo user with that user's own token (for example `teamboard-acme-bob`, `teamboard-acme-charlie`, and `teamboard-sandbox-dana` for `https://teamboard.test/mcp/workspaces/sandbox`). Run `/mcp` to inspect each server's tools: Bob has no `delete_task`, Charlie and Dana's Sandbox connection have only read tools. Asking Bob's connection to call `delete_task` on a task ID fails as an unknown tool and the task remains.
 
 [Claude Code HTTP setup](https://code.claude.com/docs/en/mcp): from a terminal in this project, read the token without adding it to shell history (zsh):
 

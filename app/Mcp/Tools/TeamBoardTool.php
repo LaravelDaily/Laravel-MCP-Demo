@@ -105,6 +105,19 @@ abstract class TeamBoardTool extends Tool
         return $actor instanceof User ? $actor : throw new AuthenticationException;
     }
 
+    /**
+     * Decide discovery eligibility from the actor's role in the endpoint
+     * workspace. Discovery is a usability filter only: every operation
+     * still authorizes through the shared task actions.
+     */
+    protected function actorCanInWorkspace(Request $request, string $ability): bool
+    {
+        $actor = $request->user();
+        $workspace = $this->context->current();
+
+        return $actor instanceof User && $workspace !== null && Gate::forUser($actor)->allows($ability, $workspace);
+    }
+
     protected function taskDetails(Task $task): ResponseFactory
     {
         $task->load(['project', 'assignee']);

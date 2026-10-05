@@ -385,7 +385,7 @@ test('advertises the complete read surface with strict schemas and safety metada
     ], ['Authorization' => 'Bearer '.$token]);
 
     $response->assertOk()
-        ->assertJsonCount(11, 'result.tools')
+        ->assertJsonCount(6, 'result.tools')
         ->assertJsonPath('result.tools.'.$index.'.name', $name)
         ->assertJsonPath('result.tools.'.$index.'.inputSchema.additionalProperties', false)
         ->assertJsonPath('result.tools.'.$index.'.outputSchema.additionalProperties', false)

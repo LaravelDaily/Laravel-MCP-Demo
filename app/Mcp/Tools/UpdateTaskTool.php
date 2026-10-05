@@ -21,6 +21,11 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 #[IsOpenWorld(false)]
 class UpdateTaskTool extends TeamBoardTool
 {
+    public function shouldRegister(Request $request): bool
+    {
+        return $this->actorCanInWorkspace($request, 'contribute');
+    }
+
     protected function execute(Request $request): ResponseFactory
     {
         $arguments = $this->validateArguments($request, ['task_id' => ['required', 'integer:strict', 'min:1']] + $this->taskUpdateRules());

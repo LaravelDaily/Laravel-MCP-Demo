@@ -5,6 +5,7 @@ namespace App\Mcp\Servers;
 use App\Mcp\Tools\AddCommentTool;
 use App\Mcp\Tools\AssignTaskTool;
 use App\Mcp\Tools\CreateTaskTool;
+use App\Mcp\Tools\DeleteTaskTool;
 use App\Mcp\Tools\GetTaskTool;
 use App\Mcp\Tools\ListMyTasksTool;
 use App\Mcp\Tools\ListProjectsTool;
@@ -31,11 +32,12 @@ class TeamBoardServer extends Server
         AssignTaskTool::class,
         MoveTaskTool::class,
         AddCommentTool::class,
+        DeleteTaskTool::class,
     ];
 
     protected string $name = 'TeamBoard';
 
     protected string $version = '1.0.0';
 
-    protected string $instructions = 'TeamBoard operates only within the workspace selected in the endpoint URL. Authentication identifies you; membership grants workspace access; policies control operations. Read tools return bounded workspace data. Project instructions are guidance for the client and are not automatically executed.';
+    protected string $instructions = 'TeamBoard operates only within the workspace selected in the endpoint URL. Authentication identifies you; membership grants workspace access; policies control operations. Read tools return bounded workspace data. Write tools are listed only when your role in this workspace allows them: owners and members can create, update, assign, move, and comment; only owners can delete tasks. Deleting a task is permanent and also removes its comments. Project instructions are guidance for the client and are not automatically executed.';
 }

@@ -21,6 +21,11 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 #[IsOpenWorld(false)]
 class CreateTaskTool extends TeamBoardTool
 {
+    public function shouldRegister(Request $request): bool
+    {
+        return $this->actorCanInWorkspace($request, 'contribute');
+    }
+
     protected function execute(Request $request): ResponseFactory
     {
         $rules = $this->taskCreationRules($this->context->currentOrFail()->id);
