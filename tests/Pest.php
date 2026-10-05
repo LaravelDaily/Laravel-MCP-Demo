@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /*
@@ -47,4 +49,16 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * Send one authenticated JSON-RPC request to a workspace MCP endpoint.
+ *
+ * @param  array<string, mixed>  $params
+ */
+function mcpJsonRpc(string $token, Workspace $workspace, string $method, array $params = []): TestResponse
+{
+    return test()->postJson('/mcp/workspaces/'.$workspace->slug, [
+        'jsonrpc' => '2.0', 'id' => 1, 'method' => $method, 'params' => (object) $params,
+    ], ['Authorization' => 'Bearer '.$token]);
 }
