@@ -71,10 +71,12 @@ test('creates tasks with todo status and medium priority by default', function (
     expect($task->status)->toBe(TaskStatus::Todo)
         ->and($task->priority)->toBe(TaskPriority::Medium);
 
-    expect($task->fresh()->status)->toBe(TaskStatus::Todo)
-        ->and($task->fresh()->priority)->toBe(TaskPriority::Medium)
-        ->and($task->fresh()->assignee_id)->toBeNull()
-        ->and($task->fresh()->due_date)->toBeNull();
+    $persisted = $task->fresh();
+
+    expect($persisted->status)->toBe(TaskStatus::Todo)
+        ->and($persisted->priority)->toBe(TaskPriority::Medium)
+        ->and($persisted->assignee_id)->toBeNull()
+        ->and($persisted->due_date)->toBeNull();
 
     $this->assertDatabaseHas('tasks', [
         'id' => $task->id,
