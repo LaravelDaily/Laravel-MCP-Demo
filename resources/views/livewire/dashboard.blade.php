@@ -42,7 +42,7 @@
                                 </div>
 
                                 <div class="flex shrink-0 items-center gap-2">
-                                    <flux:badge color="{{ $task->status->color() }}" inset>{{ $task->status->value }}</flux:badge>
+                                    <x-task-status-badge :status="$task->status" />
 
                                     @if ($task->due_date !== null)
                                         <flux:text size="sm" class="whitespace-nowrap">{{ $task->due_date->format('Y-m-d') }}</flux:text>

@@ -6,7 +6,7 @@
 
         <div class="mt-2 flex flex-wrap items-center gap-3">
             <flux:heading level="1" data-test="task-title">{{ $this->task->title }}</flux:heading>
-            <flux:badge color="{{ $this->task->status->color() }}" inset data-test="task-status">{{ $this->task->status->value }}</flux:badge>
+            <x-task-status-badge :status="$this->task->status" data-test="task-status" />
             <flux:badge color="zinc" inset data-test="task-priority">{{ $this->task->priority->value }}</flux:badge>
         </div>
     </div>

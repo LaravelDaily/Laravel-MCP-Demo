@@ -56,7 +56,7 @@
                                     <flux:link href="{{ route('tasks.show', ['taskId' => $task->id]) }}" wire:navigate>{{ $task->title }}</flux:link>
                                 </flux:table.cell>
                                 <flux:table.cell>
-                                    <flux:badge color="{{ $task->status->color() }}" inset>{{ $task->status->value }}</flux:badge>
+                                    <x-task-status-badge :status="$task->status" />
                                 </flux:table.cell>
                                 <flux:table.cell>{{ $task->priority->value }}</flux:table.cell>
                                 <flux:table.cell>{{ $task->assignee?->name ?? '—' }}</flux:table.cell>

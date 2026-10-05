@@ -19,16 +19,4 @@ enum TaskStatus: string
     {
         return [self::Todo->value, self::InProgress->value];
     }
-
-    /**
-     * Flux badge color used to render the status.
-     */
-    public function color(): string
-    {
-        return match ($this) {
-            self::Todo => 'yellow',
-            self::InProgress => 'blue',
-            self::Done => 'green',
-        };
-    }
 }
