@@ -60,6 +60,14 @@ test('resolves project tasks and comment authors through their relationships', f
         ->and($comment->author->is($alice))->toBeTrue();
 });
 
+test('creates comment authors as members of the task workspace by default', function () {
+    $task = Task::factory()->create();
+
+    $comment = Comment::factory()->for($task)->create();
+
+    expect($comment->author->roleIn($task->project->workspace_id))->toBe(WorkspaceRole::Member);
+});
+
 test('creates tasks with todo status and medium priority by default', function () {
     $project = Project::factory()->create();
 
