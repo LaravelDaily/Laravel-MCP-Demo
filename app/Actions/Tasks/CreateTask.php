@@ -33,7 +33,9 @@ class CreateTask
 
         $this->gate->forUser($actor)->authorize('create', [Task::class, $project]);
 
-        $input['title'] = trim((string) ($input['title'] ?? ''));
+        if (is_string($input['title'] ?? null)) {
+            $input['title'] = trim($input['title']);
+        }
 
         $validated = validator(
             $input,

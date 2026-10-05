@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Tasks\CreateTask;
 use App\Actions\Tasks\UpdateTaskDetails;
 use App\Enums\TaskPriority;
 use App\Enums\TaskStatus;
@@ -185,6 +186,23 @@ test('rejects task creation and editing with invalid values', function (string $
     'invalid due date' => ['due_date', '15-11-2026'],
     'oversized description' => ['description', str_repeat('a', 10001)],
 ]);
+
+test('rejects non-string task titles with a validation error', function () {
+    $owner = User::factory()->create();
+    $workspace = workspaceWithMember($owner, WorkspaceRole::Owner);
+    $project = Project::factory()->for($workspace)->create();
+    $task = Task::factory()->for($project)->create(['title' => 'Original title']);
+
+    $this->actingAs($owner);
+
+    expect(fn () => app(CreateTask::class)($owner, $project, ['title' => ['Array title']]))
+        ->toThrow(ValidationException::class)
+        ->and(fn () => app(UpdateTaskDetails::class)($owner, $task, ['title' => ['Array title']]))
+        ->toThrow(ValidationException::class);
+
+    expect($task->fresh()->title)->toBe('Original title');
+    $this->assertDatabaseCount('tasks', 1);
+});
 
 test('rejects an assignee outside the current workspace', function () {
     $owner = User::factory()->create();

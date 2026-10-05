@@ -44,8 +44,8 @@ class UpdateTaskDetails
 
         $input = array_intersect_key($input, array_flip($editableFields));
 
-        if (array_key_exists('title', $input)) {
-            $input['title'] = trim((string) $input['title']);
+        if (is_string($input['title'] ?? null)) {
+            $input['title'] = trim($input['title']);
         }
 
         $validated = validator(
