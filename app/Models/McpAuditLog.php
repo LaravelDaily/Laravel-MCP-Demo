@@ -14,7 +14,7 @@ use Illuminate\Support\Carbon;
  * remains after the task or comment is deleted.
  *
  * @property int $id
- * @property int $user_id
+ * @property int|null $user_id
  * @property int $workspace_id
  * @property string $tool
  * @property string|null $entity_type

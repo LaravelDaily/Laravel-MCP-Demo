@@ -51,6 +51,28 @@ test('shows only current workspace audit entries to owners', function () {
         ->assertDontSee('Foreign workspace change');
 });
 
+test('keeps audit entries after the acting user deletes their account', function () {
+    $owner = User::factory()->create();
+    $actor = User::factory()->create(['name' => 'Departed member']);
+    $workspace = Workspace::factory()
+        ->withMember($owner, WorkspaceRole::Owner)
+        ->withMember($actor, WorkspaceRole::Member)
+        ->create();
+    $entry = McpAuditLog::factory()->for($workspace)->for($actor, 'actor')->create(['summary' => 'Change by a departed member']);
+
+    $actor->delete();
+
+    $this->assertModelExists($entry);
+    expect($entry->fresh()->user_id)->toBeNull();
+
+    $this->actingAs($owner);
+
+    Livewire::test(McpAuditIndex::class)
+        ->assertSee('Change by a departed member')
+        ->assertSee('Deleted user')
+        ->assertDontSee('Departed member');
+});
+
 test('returns 403 for members and viewers requesting the audit page', function (WorkspaceRole $role) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, $role)->create();

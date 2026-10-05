@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::create('mcp_audit_logs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('workspace_id')->constrained()->cascadeOnDelete();
             $table->string('tool');
             $table->string('entity_type')->nullable();

@@ -21,7 +21,7 @@
                     <flux:table.row :key="$entry->id" data-test="audit-entry">
                         <flux:table.cell class="whitespace-nowrap">{{ $entry->created_at?->format('Y-m-d H:i:s') }} UTC</flux:table.cell>
                         <flux:table.cell><flux:badge size="sm">{{ $entry->tool }}</flux:badge></flux:table.cell>
-                        <flux:table.cell>{{ $entry->actor->name }}</flux:table.cell>
+                        <flux:table.cell>{{ $entry->actor?->name ?? __('Deleted user') }}</flux:table.cell>
                         <flux:table.cell class="whitespace-nowrap">{{ $entry->entity_type === null ? '—' : $entry->entity_type.' #'.$entry->entity_id }}</flux:table.cell>
                         <flux:table.cell class="max-w-lg">
                             <p class="whitespace-normal">{{ $entry->summary }}</p>
