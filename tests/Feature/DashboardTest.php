@@ -15,6 +15,7 @@ test('redirects guests to login for TeamBoard pages', function (string $routeNam
     'dashboard' => ['dashboard', []],
     'projects index' => ['projects.index', []],
     'project detail' => ['projects.show', ['projectId' => 1]],
+    'task detail' => ['tasks.show', ['taskId' => 1]],
 ]);
 
 test('authenticated users can visit the dashboard', function () {

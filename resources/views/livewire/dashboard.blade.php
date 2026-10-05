@@ -41,7 +41,9 @@
                         @foreach ($this->myUnfinishedTasks as $task)
                             <li class="flex items-center justify-between gap-4 py-3">
                                 <div class="min-w-0">
-                                    <p class="truncate text-sm font-medium">{{ $task->title }}</p>
+                                    <flux:link href="{{ route('tasks.show', ['taskId' => $task->id]) }}" wire:navigate class="truncate text-sm font-medium">
+                                        {{ $task->title }}
+                                    </flux:link>
                                     <flux:text size="sm" class="truncate">{{ $task->project->name }}</flux:text>
                                 </div>
 

@@ -47,6 +47,17 @@ The Acme workspace contains the *Website Redesign* and *Billing Improvements* pr
 - **Member** — creates and edits tasks, assigns work, changes status, comments
 - **Viewer** — read-only access, but may be assigned tasks
 
+## Using the app
+
+The domain hierarchy is workspace → project → task → comment. Log in as Alice (`alice@example.com`) to explore:
+
+- The **workspace switcher** in the sidebar lists only your workspaces (with your role in each) and stores the selection per browser session. Switching always returns to the dashboard, so a project or task page cannot keep showing the previous workspace's records.
+- The **dashboard** summarizes the selected workspace: project count, open tasks (`todo` + `in_progress`), and your own unfinished assignments. Users without any workspace membership see an empty state instead of someone else's data.
+- **Projects** lists the selected workspace's projects. Only owners can create, edit, and delete projects (deleting a project removes its tasks and comments). The project page shows the description, the AI instructions, and the project's tasks.
+- A **task** page shows its metadata, comments, and — for owners and members — inline controls to change status and assignment, an edit form for title/description/priority/due date, and a comment box. Deleting a task (owners only) also deletes its comments.
+
+Every page and mutation is scoped to the selected workspace: foreign records return 404, and role denials within an accessible workspace return 403.
+
 ## Testing
 
 ```bash

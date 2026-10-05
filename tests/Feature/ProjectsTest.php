@@ -91,10 +91,14 @@ test('forbids project mutations by members and viewers', function (WorkspaceRole
     'viewer' => [WorkspaceRole::Viewer],
 ]);
 
-test('renders project details from the selected workspace', function () {
+test('renders project and task details from the selected workspace', function () {
     $user = User::factory()->create();
+    $colleague = User::factory()->create();
 
-    $acme = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create(['name' => 'Acme']);
+    $acme = Workspace::factory()
+        ->withMember($user, WorkspaceRole::Member)
+        ->withMember($colleague, WorkspaceRole::Member)
+        ->create(['name' => 'Acme']);
     $globex = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create(['name' => 'Globex']);
 
     $website = Project::factory()->for($acme)->create([
@@ -102,7 +106,12 @@ test('renders project details from the selected workspace', function () {
         'description' => 'Refresh the marketing site',
         'instructions' => 'Require acceptance criteria.',
     ]);
-    Task::factory()->for($website)->create(['title' => 'Redesign pricing page']);
+    $task = Task::factory()->for($website)->assignedTo($colleague)->create([
+        'title' => 'Redesign pricing page',
+        'description' => 'New tiers need a new table.',
+        'due_date' => '2026-11-01',
+    ]);
+    Comment::factory()->for($task)->for($colleague, 'author')->create(['body' => 'Pricing table approved.']);
 
     $foreign = Project::factory()->for($globex)->create(['name' => 'Globex Launch']);
     Task::factory()->for($foreign)->create(['title' => 'Migrate payroll data']);
@@ -118,9 +127,20 @@ test('renders project details from the selected workspace', function () {
         ->assertSee('Redesign pricing page')
         ->assertDontSee('Globex Launch')
         ->assertDontSee('Migrate payroll data');
+
+    $this->get(route('tasks.show', ['taskId' => $task->id]))
+        ->assertOk()
+        ->assertSee('Redesign pricing page')
+        ->assertSee('New tiers need a new table.')
+        ->assertSee('Website Redesign')
+        ->assertSee($colleague->name)
+        ->assertSee('2026-11-01')
+        ->assertSee('Pricing table approved.')
+        ->assertDontSee('Globex Launch')
+        ->assertDontSee('Migrate payroll data');
 });
 
-test('returns 404 for foreign project routes', function () {
+test('returns 404 for foreign project and task routes', function () {
     $user = User::factory()->create();
 
     $acme = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create();
@@ -130,8 +150,10 @@ test('returns 404 for foreign project routes', function () {
     session([WorkspaceContext::SESSION_KEY => $acme->id]);
 
     $foreignProject = Project::factory()->for($globex)->create();
-    Task::factory()->for($foreignProject)->create();
+    $foreignTask = Task::factory()->for($foreignProject)->create();
 
     $this->get(route('projects.show', ['projectId' => $foreignProject->id]))->assertNotFound();
     $this->get(route('projects.show', ['projectId' => $foreignProject->id + 1000]))->assertNotFound();
+    $this->get(route('tasks.show', ['taskId' => $foreignTask->id]))->assertNotFound();
+    $this->get(route('tasks.show', ['taskId' => $foreignTask->id + 1000]))->assertNotFound();
 });

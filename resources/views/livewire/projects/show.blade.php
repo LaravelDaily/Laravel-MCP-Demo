@@ -26,7 +26,15 @@
     </div>
 
     <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-        <flux:heading level="2">{{ __('Tasks') }}</flux:heading>
+        <div class="flex items-center justify-between gap-4">
+            <flux:heading level="2">{{ __('Tasks') }}</flux:heading>
+
+            @if ($this->canCreateTasks)
+                <flux:button variant="primary" icon="plus" wire:click="startCreatingTask" data-test="create-task">
+                    {{ __('New task') }}
+                </flux:button>
+            @endif
+        </div>
 
         @if ($this->tasks->isEmpty())
             <flux:text class="mt-3">{{ __('No tasks yet.') }}</flux:text>
@@ -44,7 +52,9 @@
                     <flux:table.rows>
                         @foreach ($this->tasks as $task)
                             <flux:table.row>
-                                <flux:table.cell class="font-medium" data-test="task-title">{{ $task->title }}</flux:table.cell>
+                                <flux:table.cell class="font-medium" data-test="task-title">
+                                    <flux:link href="{{ route('tasks.show', ['taskId' => $task->id]) }}" wire:navigate>{{ $task->title }}</flux:link>
+                                </flux:table.cell>
                                 <flux:table.cell>
                                     <flux:badge color="{{ $task->status->color() }}" inset>{{ $task->status->value }}</flux:badge>
                                 </flux:table.cell>
@@ -58,4 +68,36 @@
             </div>
         @endif
     </div>
+
+    <flux:modal name="task-form" class="w-full max-w-lg">
+        <form wire:submit="createTask" class="space-y-6">
+            <flux:heading>{{ __('New task') }}</flux:heading>
+
+            <flux:input wire:model="title" :label="__('Title')" maxlength="255" />
+
+            <flux:textarea wire:model="description" :label="__('Description')" rows="4" />
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <flux:select wire:model="assignee_id" :label="__('Assignee')">
+                    <flux:select.option value="">{{ __('Unassigned') }}</flux:select.option>
+                    @foreach ($this->members as $member)
+                        <flux:select.option value="{{ $member->id }}">{{ $member->name }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+
+                <flux:select wire:model="priority" :label="__('Priority')">
+                    @foreach (\App\Enums\TaskPriority::cases() as $case)
+                        <flux:select.option value="{{ $case->value }}">{{ $case->value }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+            </div>
+
+            <flux:input wire:model="due_date" :label="__('Due date')" type="date" />
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" flux:modal.close>{{ __('Cancel') }}</flux:button>
+                <flux:button variant="primary" type="submit">{{ __('Create task') }}</flux:button>
+            </div>
+        </form>
+    </flux:modal>
 </div>

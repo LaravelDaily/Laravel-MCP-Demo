@@ -137,6 +137,17 @@ class WorkspaceContext
     }
 
     /**
+     * Resolve a task of the current workspace by ID, with the same
+     * not-found contract as project().
+     *
+     * @throws ModelNotFoundException<Task>
+     */
+    public function task(int $taskId): Task
+    {
+        return $this->tasks()->findOrFail($taskId);
+    }
+
+    /**
      * Switch the browser selection to a workspace the current user belongs
      * to. A foreign or missing workspace is rejected as not found and never
      * stored, so the response does not reveal whether it exists.
