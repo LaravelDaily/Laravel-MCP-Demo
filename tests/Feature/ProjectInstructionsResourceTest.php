@@ -9,6 +9,7 @@ use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Workspaces\WorkspaceContext;
+use Illuminate\Support\Facades\Auth;
 
 test('discovers the project instructions resource template', function () {
     $user = User::factory()->create();
@@ -113,9 +114,14 @@ test('does not mutate data when reading resources or requesting prompts', functi
     $token = $user->createToken('Read-only context client')->plainTextToken;
 
     $resource = mcpJsonRpc($token, $workspace, 'resources/read', ['uri' => 'project://'.$project->id.'/instructions']);
+    Auth::forgetGuards();
+    $prompt = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project_id' => (string) $project->id]]);
 
     $resource->assertOk()
         ->assertJsonPath('result.contents.0.mimeType', 'application/json');
+    $prompt->assertOk()
+        ->assertJsonCount(1, 'result.messages')
+        ->assertDontSee(['create_task', 'update_task', 'assign_task', 'move_task', 'add_comment', 'delete_task']);
     expect([$project->fresh()->getAttributes(), $task->fresh()->getAttributes(), $comment->fresh()->getAttributes()])->toBe($before);
     expect(Project::count())->toBe(1);
     expect(Task::count())->toBe(1);
