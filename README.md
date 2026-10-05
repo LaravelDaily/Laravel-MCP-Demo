@@ -72,7 +72,9 @@ Log in and open **Settings → MCP access** (`/settings/mcp-access`). Create a n
 
 The MCP endpoint is `https://teamboard.test/mcp/workspaces/{slug}`; demo slugs are `acme`, `sandbox`, and `globex`. Send `Authorization: Bearer <token>` on every request. Browser sessions are not accepted for MCP authentication. Identity comes from Sanctum, membership controls workspace access, and existing policies control operations; token abilities do not represent roles. The URL selects the workspace independently of the browser switcher. Invalid tokens receive 401; unknown or inaccessible workspace slugs receive 404.
 
-This checkpoint supports initialization; tools are introduced in the next commit.
+This checkpoint exposes **`list_tasks`** to owners, members, and viewers. Optional filters are `project_id`, `status` (`todo`, `in_progress`, `done`), `priority` (`low`, `medium`, `high`), `assignee_id`, and `search` (a trimmed literal substring of title or description, up to 200 characters). Filters combine conjunctively and project/member IDs must belong to the endpoint workspace. Unsupported arguments and explicit null filters are rejected.
+
+Results are ordered by ascending task ID. `page` defaults to 1, `per_page` defaults to 25 and accepts 1–100. The structured response contains `data` task summaries and `meta: { page, per_page, total, last_page }`; pages past the end return empty data. Each summary has only `id`, `title`, `project: { id, name }`, `status`, `priority`, nullable `assignee: { id, name }`, and nullable `due_date` (`YYYY-MM-DD`). A matching JSON text fallback is supplied for clients that need it.
 
 [Claude Code HTTP setup](https://code.claude.com/docs/en/mcp): from a terminal in this project, read the token without adding it to shell history (zsh):
 
@@ -82,17 +84,29 @@ claude mcp add --transport http --scope local teamboard-acme \
   https://teamboard.test/mcp/workspaces/acme \
   --header "Authorization: Bearer $TEAMBOARD_TOKEN"
 unset TEAMBOARD_TOKEN
+export NODE_EXTRA_CA_CERTS="$HOME/Library/Application Support/Herd/config/valet/CA/LaravelValetCASelfSigned.pem"
 claude
 ```
 
-Run `/mcp` inside Claude Code and check the connection. The local scope keeps credentials out of a project `.mcp.json`; never commit tokens or client secrets. Revoke your token after testing.
+Run `/mcp` inside Claude Code and check the connection. Then try:
 
-For [Inspector CLI](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md), use the same endpoint and header:
+- “Use teamboard-acme to list tasks with page 1 and per_page 2. Show the pagination metadata.”
+- “Use teamboard-acme to list high-priority tasks whose title or description contains pricing.”
+- “Call list_tasks with workspace_id 999 and show the validation error.”
+
+Expect only Acme data. Before revoking the token, test tenant denial by adding another local server named `teamboard-globex` with the same Alice token and URL ending `/globex`; it must fail with 404. Then revoke the token in Settings → MCP access, reconnect the Acme server in `/mcp`, and confirm authentication fails. The local scope keeps credentials out of a project `.mcp.json`; never commit tokens or client secrets.
+
+Read `TEAMBOARD_TOKEN` again with the hidden prompt above before running [Inspector CLI](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md) with the same endpoint and header. Use an unrevoked token:
 
 ```bash
 npx -y @modelcontextprotocol/inspector --cli \
   https://teamboard.test/mcp/workspaces/acme --transport http \
   --method tools/list --header "Authorization: Bearer $TEAMBOARD_TOKEN"
+npx -y @modelcontextprotocol/inspector --cli \
+  https://teamboard.test/mcp/workspaces/acme --transport http \
+  --method tools/call --tool-name list_tasks --tool-arg per_page=2 \
+  --header "Authorization: Bearer $TEAMBOARD_TOKEN"
+unset TEAMBOARD_TOKEN
 ```
 
-For Node clients that do not trust Herd's local CA, export `NODE_EXTRA_CA_CERTS` with the path to Herd's CA certificate before starting the client. Keep TLS verification enabled. Automated transport tests do not substitute for a real client connection; manual verification is reported at each course checkpoint.
+The `NODE_EXTRA_CA_CERTS` example above is the macOS Herd CA path verified here; adjust it for your environment before running Node clients. Keep TLS verification enabled. At the first-tool checkpoint, real HTTPS initialization/discovery/list_tasks, 401 without a token, foreign/unknown-workspace 404, revocation, and Inspector CLI discovery/call were verified using a temporary seeded Alice token (subsequently revoked). Claude Code verification is pending the reviewer’s manual check. Automated transport tests do not substitute for that client check.
