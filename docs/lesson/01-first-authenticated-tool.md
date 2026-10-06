@@ -4,11 +4,11 @@
 | --- | --- |
 | Starts at | `course/00-teamboard-baseline` |
 | Ends at | `course/01-first-tool` |
-| Length goal | 15–20 minutes |
+| Length goal | 20 minutes |
 
 ## Goal
 
-Connect an AI client to TeamBoard securely. Cover the web transport, Sanctum bearer tokens, the workspace in the URL, and one tool, `list_tasks`, with a strict schema and structured output. By the end, Claude Code lists Acme's tasks as Alice and cannot reach Globex.
+Lesson 00 showed the end result; now build it up step by step, starting from the plain app. Connect an AI client to TeamBoard securely. Cover the web transport, Sanctum bearer tokens, the workspace in the URL, and one tool, `list_tasks`, with a strict schema and structured output. By the end, Claude Code lists Acme's tasks as Alice and cannot reach Globex.
 
 ## Commands
 
@@ -55,6 +55,21 @@ We deliberately did **not** run `php artisan install:api`, so there is no `route
 
 ## Code walkthrough
 
+### First: the existing app pieces this lesson relies on (2–3 minutes)
+
+Lesson 00 skipped the internals, so introduce only what the MCP endpoint touches, at the baseline tag (`git diff` isn't needed yet):
+
+1. **The domain, in one sentence each:**
+   - `app/Models/Workspace.php` has members (through the `workspace_user` table with a `role`), projects, and tasks through those projects.
+   - `app/Models/User.php::workspaces()` and `roleIn()` give the user's memberships and the role in each.
+2. **`app/Workspaces/WorkspaceContext.php`** is the single place that answers "which workspace are we in?":
+   - In the browser, `current()` reads the workspace selected in the session.
+   - `projects()`, `tasks()`, `project($id)` and `task($id)` are always scoped to that workspace, so a foreign ID is simply "not found".
+   - **`setExplicitWorkspace()`** is the seam we use today. Another entry point, like an MCP URL, can set the workspace for the current request only, after checking membership.
+3. One rule to say out loud: **every record lookup goes through the selected workspace**. This lesson's tool never queries `Task::` directly.
+
+### Then: what this lesson added
+
 1. **`routes/ai.php`**: `Mcp::web('/mcp/workspaces/{workspace}', TeamBoardServer::class)` with middleware `['auth:sanctum', ResolveMcpWorkspace::class]`. The order matters: authenticate first, then look up the workspace.
 2. **`config/sanctum.php`**: `'guard' => []` and `'stateful' => []`.
    - Bearer tokens only. A logged-in browser session can't call MCP, and a test proves it.
@@ -72,6 +87,8 @@ We deliberately did **not** run `php artisan install:api`, so there is no `route
 6. **`app/Livewire/Settings/McpAccess.php`**: the plaintext token is kept in a `protected` property, so it only appears in the one response that created it. Revocation uses `$user->tokens()->findOrFail()`, so users can't revoke other people's tokens.
 
 ## Tests to show
+
+Optional, if you want one baseline test before the MCP ones: `WorkspaceContextTest` → `does not carry workspace context into another request`, which shows why the explicit workspace lives on the request.
 
 ```bash
 php artisan test --compact tests/Feature/McpEndpointTest.php tests/Feature/ListTasksToolTest.php tests/Feature/Settings/McpAccessTest.php
