@@ -48,16 +48,18 @@ Remove it again after the demo (and run `php artisan config:clear` again).
 
 1. Connect `teamboard-alice` (Alice, `/acme`).
 2. Audit trail: run a short workflow on a new task:
-   - "Use teamboard-alice to create_task 'Audit demo task' in project 1, assign it to Bob (find him with list_workspace_members), move it to in_progress, add_comment 'Looks good', then delete_task it."
+   - "Using teamboard-alice, add a task called 'Audit demo task' to the Website Redesign project, assign it to Bob, mark it in progress, comment 'Looks good', and then delete it."
+   - Tools: `create_task`, `list_workspace_members`, `assign_task`, `move_task`, `add_comment`, `delete_task`. Approve the delete when asked.
 3. In the browser as Alice, open **MCP audit log** in the sidebar. Expected:
    - five entries, newest first: `delete_task`, `add_comment`, `move_task`, `assign_task`, `create_task`;
    - each shows the actor, an entity reference and a short summary;
    - the deleted task's history is still there.
    - Point out what's **not** stored: no comment body, no description, no token.
-4. Reads aren't audited: ask Claude to `list_tasks`, then refresh the audit page. Nothing new appears. Web UI changes aren't recorded either.
+4. Reads aren't audited: ask Claude "What tasks do we have?", then refresh the audit page. Nothing new appears. Web UI changes aren't recorded either.
 5. Owners only: log in as **Bob** and open `https://teamboard.test/mcp-audit` to get **403**. There's no sidebar link for him either.
 6. Rate limit (with `TEAMBOARD_MCP_RATE_LIMIT=5`):
-   - Restart Claude Code, then ask: "Use teamboard-alice list_tasks with per_page 1, then again for pages 2, 3, 4 and 5."
+   - Restart Claude Code, then ask: "Show me our tasks one at a time, the first five."
+   - Tools: `list_tasks` with `per_page` 1, pages 1–5 (the agent may batch differently; "one page per request" helps).
    - Expected: the calls start failing with HTTP 429 (Too Many Requests). `initialize` and discovery requests count too, so it may happen sooner than the fifth call.
    - The limit is per user, across all workspace URLs and tokens. Wait a minute, and it works again.
 7. Show `README.md`: it's now the complete setup and connection guide.

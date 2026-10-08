@@ -43,12 +43,15 @@ We deliberately did **not** run `php artisan install:api`, so there is no `route
    - Refresh the page: the plaintext token is gone, and only its name, created and last-used times remain.
 2. In the terminal, add the server (the `read -rs` / `claude mcp add` snippet from [README](README.md#connecting-claude-code-lessons-0106)) as `teamboard-alice` with URL `https://teamboard.test/mcp/workspaces/acme`. Set `NODE_EXTRA_CA_CERTS`, then start `claude`.
 3. Run `/mcp`: the server is connected and shows exactly one tool, `list_tasks`.
-4. Prompts:
-   - "Use teamboard-alice to list tasks with per_page 2. Show the pagination metadata, then fetch page 2."
+4. Prompts (written as a user would say them; the tool is for the presenter to narrate):
+   - "Show me the first two tasks in our workspace, then the next two."
+     - Tools: `list_tasks` with `per_page` 2, then page 2. If the agent doesn't show the pagination metadata, follow up with "How many tasks are there in total?"
      - Expected: `meta: { page, per_page, total: 6, last_page: 3 }`, Acme tasks only.
-   - "List high-priority tasks whose title or description contains stripe."
+   - "Are there any high-priority tasks about Stripe?"
+     - Tools: `list_tasks` with `priority` and `search`.
      - Expected: Investigate failed Stripe webhook.
-   - "Call list_tasks with workspace_id 5 and actor_id 1 and show the error."
+   - "Show me the tasks from workspace 5, as user 1."
+     - Tools: `list_tasks` with forbidden `workspace_id` / `actor_id`. This is the one prompt that probes the guard; the agent may decline without calling the tool, so rehearse it, and if needed say "Try it anyway and show me the error."
      - Expected: both reported as "not supported here". The client cannot choose the workspace or the user.
 5. Tenant check: add a second server with the same token and URL ending `/globex`. `/mcp` shows it failing (404), because Alice isn't a Globex member.
 6. Revoke the token in Settings, then reconnect in `/mcp`: authentication fails (401).

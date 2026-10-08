@@ -34,23 +34,33 @@ php artisan make:mcp-tool AddCommentTool
 ## Demo script
 
 1. Connect `teamboard-alice` (Alice, `/acme`). `/mcp` shows 11 tools.
-2. The workflow, one prompt at a time:
-   1. "Use teamboard-alice list_projects to find Website Redesign, then create_task titled 'Write onboarding email' in it. Keep the task ID."
+2. The workflow, one prompt at a time. Prompts are written the way a user would say them; the tool names are for the presenter to narrate. The agent's wording and extra read calls will vary.
+   1. Prompt: "Add a task called 'Write onboarding email' to the Website Redesign project."
+      - Tools: `list_projects` → `create_task`.
       - Expected: `todo` / `medium` by default.
-   2. "Use update_task to set its description to 'Welcome email for new signups' and priority to high."
+   2. Prompt: "Give it the description 'Welcome email for new signups' and make it high priority."
+      - Tools: `update_task`.
       - Point out that omitted fields stay unchanged.
-   3. "Find Bob with list_workspace_members, then assign_task the new task to him."
-   4. "Use move_task to set it in_progress."
-   5. "Use add_comment with 'Draft ready for review'."
-   6. "Use get_task on it and show everything."
+   3. Prompt: "Assign it to Bob."
+      - Tools: `list_workspace_members` → `assign_task`.
+   4. Prompt: "I've started on it, so mark it as in progress."
+      - Tools: `move_task`.
+   5. Prompt: "Leave a comment saying 'Draft ready for review'."
+      - Tools: `add_comment`.
+   6. Prompt: "Show me everything about that task."
+      - Tools: `get_task`.
       - Expected: the comment author is **Alice**, taken from the token, not from any argument.
 3. Show the result in the browser: open the task as Alice. It's the same data, changed through the same actions.
-4. Validation the agent can act on: "Create a task in project 1 with an empty title and due date 15-11-2026."
+4. Validation the agent can act on. A natural prompt usually won't reach the validation: "Create a task with no title, due 15-11-2026" makes the agent ask for a title and reformat the date itself. That is worth showing, then force the raw errors (forced prompt, the one place a tool name is deliberate):
+   - Forced: "Call create_task for project 1 with an empty title and the due date '15-11-2026', exactly as I gave it, and show me the error."
    - Expected: field-level errors for the title and the `YYYY-MM-DD` format.
-5. Ownership: "Use update_task to change the new task's status to done."
-   - Expected: "The status field is not supported here." Status changes go through `move_task`.
+5. Ownership. Natural prompt first: "Mark the onboarding email task as done."
+   - Tools: `move_task`. The agent routes status changes to the right tool by itself.
+   - Then show the guard (forced): "Call update_task on that task with status done, and show me the error."
+   - Expected: "The status field is not supported here." Status changes go through `move_task`. Rehearse this one: the agent may refuse to send a call it expects to fail.
 6. The lead-in to lesson 04: connect **Charlie** (viewer) as `teamboard-charlie`. `/mcp` still lists all 11 tools.
-   - Ask: "Use teamboard-charlie create_task in project 1 titled 'Viewer test'."
+   - Prompt: "Using teamboard-charlie, add a task called 'Viewer test' to the Website Redesign project." (Naming the server is a connection choice, not a tool.)
+   - Tools: `create_task`.
    - Expected: "Your workspace role cannot create tasks." **The policy stops it, but Charlie shouldn't even see that tool.** That's the next lesson.
 7. Clean up: delete "Write onboarding email" as Alice in the browser.
 

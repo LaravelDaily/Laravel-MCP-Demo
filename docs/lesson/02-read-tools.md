@@ -34,18 +34,24 @@ php artisan make:mcp-tool ListWorkspaceMembersTool
 ## Demo script
 
 1. Create a token as **Alice** and connect `teamboard-alice` to `/acme` (see [README](README.md#connecting-claude-code-lessons-0106)). Restart Claude Code; `/mcp` shows six tools.
-2. Prompts:
-   - "Use teamboard-alice list_projects. Show project IDs and open task counts."
+2. Prompts (written as a user would say them; the tool is for the presenter to narrate):
+   - "What projects do we have, and how much is still open in each?"
+     - Tools: `list_projects`.
      - Expected: Website Redesign has 3 open tasks; Billing Improvements has 2 (the done task isn't counted).
-   - "Use list_my_tasks to show my assignments, including completed ones."
+   - "What's assigned to me, including what I've already finished?"
+     - Tools: `list_my_tasks`.
      - Expected: Alice's two tasks.
-   - "Use search_tasks with query WEBHOOK, then narrow it to project 2."
+   - "Find anything about webhooks, then only the Billing project."
+     - Tools: `search_tasks`, then the same with `project_id` 2 (the agent may use `list_tasks` with `search` instead).
      - Expected: the search is case-insensitive and literal.
-   - "Use get_task on the Stripe webhook task. Show the description, comments and comments_total."
-     - Expected: the latest comments, newest first, with authors as `{ id, name }` only.
-   - "Use list_workspace_members to find Bob and show his ID and role."
+   - "Tell me about the Stripe webhook task: the description and what people said in the comments."
+     - Tools: `search_tasks` or `list_tasks` → `get_task`.
+     - Expected: the latest comments, newest first, with authors as `{ id, name }` only. To surface `comments_total`, add "and how many comments are there in all?"
+   - "Who is Bob, and what's his role?"
+     - Tools: `list_workspace_members`.
      - Expected: ID 2, `member`, and **no email**.
-   - "Call list_tasks with actor_id 1 and workspace_id 5 together and show the errors."
+   - "Show me the tasks from workspace 5, as user 1." (forced guard check)
+     - Tools: `list_tasks` with forbidden `actor_id` and `workspace_id`. The agent may decline without calling; if so, say "Try it anyway and show me the errors."
      - Expected: both are reported in a single error.
 3. Optional: ask "Which unfinished tasks in Acme are overdue?" and watch Claude combine `list_tasks` filters and pagination by itself.
 

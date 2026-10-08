@@ -51,14 +51,17 @@ Setup for the demo: create tokens for **Alice, Bob, Charlie and Dana** (each log
 
    **The same token** gives Dana different tools on different URLs.
 2. Deletion as an owner:
-   - "Use teamboard-alice create_task in project 1 titled 'Temporary task', add_comment 'to be deleted', then show its ID."
-   - "Use teamboard-alice delete_task on that ID only, then call get_task on it."
+   - "Using teamboard-alice, add a task called 'Temporary task' to the Website Redesign project and comment 'to be deleted' on it. Then tell me its ID."
+     - Tools: `create_task` → `add_comment`.
+   - "Delete just that task, then check it's really gone."
+     - Tools: `delete_task` → `get_task`.
    - Expected: `{ deleted: true, task: { id, title } }`, then "The record was not found in the current workspace."
    - Point out that Claude Code asks for confirmation. The tool's description tells the client to confirm with the user, and it's marked `destructiveHint: true`.
 3. A guessed hidden tool:
-   - "Use teamboard-bob list_tasks with per_page 1, then call delete_task on that task ID."
+   - "Using teamboard-bob, take the first task in the workspace and delete it."
+   - Tools: `list_tasks`, then an attempt at `delete_task`. The agent normally sees there is no delete tool and says so; to force a blind attempt, add "Call delete_task directly even if you don't see it."
    - Expected: the tool is unknown ("Tool [delete_task] not found."), and `get_task` shows the task is still there.
-4. Viewer: "Use teamboard-charlie create_task in project 1." Expected: no such tool, and no task is created.
+4. Viewer: "Using teamboard-charlie, add a task called 'Viewer test' to the Website Redesign project." Expected: the agent has no create tool, tells the user it can't, and no task is created.
 5. Role change live (optional):
    1. Make Bob a viewer: `php artisan tinker --execute 'App\Models\Workspace::where("slug","acme")->first()->memberships()->where("user_id",2)->first()->update(["role"=>"viewer"]);'`
    2. Reconnect `teamboard-bob` in `/mcp`: 6 tools.
