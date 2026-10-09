@@ -9,7 +9,7 @@ Each lesson explains code that already exists at a Git tag. You do not build any
 | 02 | [Useful read tools for agents](02-read-tools.md) | `course/01-first-tool` | `course/02-read-tools` |
 | 03 | [Let the agent create and update work](03-write-tools.md) | `course/02-read-tools` | `course/03-write-tools` |
 | 04 | [Permissions, tenant isolation, and dangerous tools](04-permissions.md) | `course/03-write-tools` | `course/04-permissions` |
-| 05 | [Tools, resources, and prompts in practice](05-resources-prompts.md) | `course/04-permissions` | `course/05-resources-prompts` |
+| 05 | [Resources and prompts: ship ready-made workflows](05-resources-prompts.md) | `course/04-permissions` | `course/05-resources-prompts` |
 | 06 | [Production basics](06-production-basics.md) | `course/05-resources-prompts` | `course/06-production-basics` |
 
 Lesson 07 (Passport OAuth) is recorded separately later.
