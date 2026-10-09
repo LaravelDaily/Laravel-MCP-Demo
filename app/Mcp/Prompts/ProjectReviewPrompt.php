@@ -6,6 +6,7 @@ use App\Concerns\TaskValidationRules;
 use App\Models\Project;
 use App\Workspaces\WorkspaceContext;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Laravel\Mcp\Request;
@@ -19,7 +20,7 @@ use Throwable;
 
 #[Name('project_review')]
 #[Title('Project review')]
-#[Description('Review one project in the endpoint workspace: read its instructions resource, inspect unfinished tasks with the read tools, and summarize overdue, high-priority, unassigned, and likely blocked work with three next actions. The server only generates these instructions; your client runs the review without changing data.')]
+#[Description('Review one project in the endpoint workspace, chosen by name or ID: read its instructions resource, inspect unfinished tasks with the read tools, and summarize overdue, high-priority, unassigned, and likely blocked work with three next actions. The server only generates these instructions; your client runs the review without changing data.')]
 class ProjectReviewPrompt extends Prompt
 {
     use TaskValidationRules;
@@ -37,15 +38,16 @@ class ProjectReviewPrompt extends Prompt
             $workspace = $this->context->currentOrFail();
             Gate::authorize('view', $workspace);
 
-            $this->rejectUnsupportedFields($request->all(), ['project_id']);
+            $this->rejectUnsupportedFields($request->all(), ['project']);
             $request->validate([
-                'project_id' => ['required', 'regex:/^[1-9][0-9]{0,9}$/', $this->projectExistsRule($workspace->id)],
+                'project' => ['required', 'string', 'max:255'],
             ], [
-                'project_id.required' => __('The project_id argument is required. Use list_projects to find a project ID.'),
-                'project_id.regex' => __('The project_id must be a positive whole-number project ID.'),
-            ] + $this->taskValidationMessages());
+                'project.required' => __('The project argument is required. Use list_projects to see the projects in this workspace.'),
+                'project.string' => __('The project must be a project name or ID.'),
+                'project.max' => __('The project must be a project name or ID.'),
+            ]);
 
-            $project = $this->context->project((int) $request->get('project_id'));
+            $project = $this->findProject(trim($request->get('project')));
             Gate::authorize('view', $project);
 
             return Response::text($this->reviewInstructions($project, $workspace->name));
@@ -67,11 +69,50 @@ class ProjectReviewPrompt extends Prompt
     {
         return [
             new Argument(
-                name: 'project_id',
-                description: 'ID of a project in this workspace, as returned by list_projects (for example "12").',
+                name: 'project',
+                description: 'Name or ID of a project in this workspace (for example "Website Redesign", "website", or "12"). Names are matched case-insensitively, and part of a name works when it matches one project.',
                 required: true,
             ),
         ];
+    }
+
+    /**
+     * Resolve the project a person typed: an exact ID or name first, then a
+     * unique partial name. Only the current workspace's projects are
+     * searched, so foreign and missing projects give the same error.
+     *
+     * @throws ValidationException
+     */
+    protected function findProject(string $search): Project
+    {
+        $name = mb_strtolower($search);
+
+        $exactMatches = $this->context->projects()
+            ->where(function (Builder $query) use ($search, $name): void {
+                $query->whereRaw('lower(name) = ?', [$name]);
+
+                if (preg_match('/^[1-9][0-9]{0,9}$/', $search) === 1) {
+                    $query->orWhere('id', (int) $search);
+                }
+            })
+            ->limit(2)
+            ->get();
+
+        $matches = $exactMatches->isNotEmpty()
+            ? $exactMatches
+            : $this->context->projects()
+                ->whereRaw("lower(name) like ? escape '!'", ['%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $name).'%'])
+                ->limit(2)
+                ->get();
+
+        if ($matches->count() === 1) {
+            return $matches->first();
+        }
+
+        throw ValidationException::withMessages(['project' => $matches->isEmpty()
+            ? __('No project in the current workspace matches ":search". Use list_projects to see the projects in this workspace.', ['search' => $search])
+            : __('More than one project in the current workspace matches ":search". Use a longer name or the project ID from list_projects.', ['search' => $search]),
+        ]);
     }
 
     protected function reviewInstructions(Project $project, string $workspaceName): string

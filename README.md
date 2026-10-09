@@ -159,13 +159,13 @@ TeamBoard also exposes one resource template and one prompt. Both are available 
 
 **Resource template `project://{project}/instructions`** (name `project_instructions`, MIME type `application/json`). Replace `{project}` with a project ID from `list_projects`, for example `project://1/instructions` for Acme's Website Redesign. The content is JSON with exactly `project: { id, name, description }` and nullable `instructions`; a project without guidance returns `"instructions": null`. It is listed by `resources/templates/list`, not as one static resource per project, so `resources/list` is empty. Foreign, missing, and malformed project IDs all return the same JSON-RPC error (`-32602`, "The project was not found in the current workspace.") without project details; a URI that does not match the template is reported as an unknown resource.
 
-**Prompt `project_review`** with required argument `project_id` (MCP prompt arguments are strings, so send `"1"`; it must be a positive whole number). The server returns one user message that names the project and workspace, today's date in the application timezone (UTC), the resource URI to read, and the read tools to use (`list_tasks` with pagination, `get_task`, and optionally `search_tasks` and `list_workspace_members`). It asks the client to report overdue unfinished tasks (due date strictly before today), high-priority and unassigned unfinished tasks, and likely blockers inferred from descriptions and comments, then summarize and recommend the next three actions. It tells the client not to change data unless the user makes a separate request. The server only generates the text: it does not call a model, run tools, or guarantee that a host reads the resource. Missing or invalid IDs get validation errors; foreign and missing project IDs get the same "The project must belong to the current workspace." error.
+**Prompt `project_review`** with required argument `project`: a project name or ID in the endpoint workspace, because people type prompt arguments by hand. An ID or a case-insensitive exact name wins; otherwise part of a name works when it matches exactly one project (`website` finds "Website Redesign"). The server returns one user message that names the project and workspace, today's date in the application timezone (UTC), the resource URI to read, and the read tools to use (`list_tasks` with pagination, `get_task`, and optionally `search_tasks` and `list_workspace_members`). It asks the client to report overdue unfinished tasks (due date strictly before today), high-priority and unassigned unfinished tasks, and likely blockers inferred from descriptions and comments, then summarize and recommend the next three actions. It tells the client not to change data unless the user makes a separate request. The server only generates the text: it does not call a model, run tools, or guarantee that a host reads the resource. A missing argument, a name matching several projects, and a project that isn't in the workspace each get a validation error; foreign and missing projects get the same "No project in the current workspace matches …" error, so other workspaces are never revealed.
 
 In Claude Code, with the `teamboard-acme` server connected as above:
 
 - Resource: type `@teamboard-acme:project://1/instructions` in a message (for example "Summarize @teamboard-acme:project://1/instructions"). Because this is a template, it may not appear in the `@` autocomplete list; type the full URI. You can also ask Claude to "read the MCP resource project://1/instructions from teamboard-acme".
-- Prompt: type `/` and pick `/teamboard-acme:project_review (MCP)`, or run `/mcp__teamboard-acme__project_review 1`, where `1` is the project ID. Claude then performs the review with the read tools; approve the tool calls as usual.
-- Try `project://4/instructions` or `/mcp__teamboard-acme__project_review 4` (a Globex project) to see the not-found error without Globex details.
+- Prompt: type `/` and pick `/teamboard-acme:project_review (MCP)`, or run `/mcp__teamboard-acme__project_review website` (a project name, part of one, or an ID such as `1`). Claude then performs the review with the read tools; approve the tool calls as usual.
+- Try `project://4/instructions` or `/mcp__teamboard-acme__project_review payroll` (a Globex project) to see the not-found error without Globex details.
 
 With Inspector CLI (same token handling as above):
 
@@ -182,6 +182,6 @@ npx -y @modelcontextprotocol/inspector --cli \
   --method prompts/list --header "Authorization: Bearer $TEAMBOARD_TOKEN"
 npx -y @modelcontextprotocol/inspector --cli \
   https://teamboard.test/mcp/workspaces/acme --transport http \
-  --method prompts/get --prompt-name project_review --prompt-args project_id=1 \
+  --method prompts/get --prompt-name project_review --prompt-args project=website \
   --header "Authorization: Bearer $TEAMBOARD_TOKEN"
 ```

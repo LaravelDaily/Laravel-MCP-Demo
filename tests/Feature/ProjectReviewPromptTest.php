@@ -29,10 +29,10 @@ test('discovers project_review with a required project argument', function () {
         ->assertJsonCount(1, 'result.prompts')
         ->assertJsonPath('result.prompts.0.name', 'project_review')
         ->assertJsonPath('result.prompts.0.title', 'Project review')
-        ->assertJsonPath('result.prompts.0.description', 'Review one project in the endpoint workspace: read its instructions resource, inspect unfinished tasks with the read tools, and summarize overdue, high-priority, unassigned, and likely blocked work with three next actions. The server only generates these instructions; your client runs the review without changing data.')
+        ->assertJsonPath('result.prompts.0.description', 'Review one project in the endpoint workspace, chosen by name or ID: read its instructions resource, inspect unfinished tasks with the read tools, and summarize overdue, high-priority, unassigned, and likely blocked work with three next actions. The server only generates these instructions; your client runs the review without changing data.')
         ->assertJsonPath('result.prompts.0.arguments', [[
-            'name' => 'project_id',
-            'description' => 'ID of a project in this workspace, as returned by list_projects (for example "12").',
+            'name' => 'project',
+            'description' => 'Name or ID of a project in this workspace (for example "Website Redesign", "website", or "12"). Names are matched case-insensitively, and part of a name works when it matches one project.',
             'required' => true,
         ]]);
 });
@@ -44,7 +44,7 @@ test('generates a review prompt for the selected workspace project', function ()
     $project = Project::factory()->for($workspace)->create(['name' => 'Website Redesign']);
     $token = $user->createToken('Prompt client')->plainTextToken;
 
-    $response = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project_id' => (string) $project->id]]);
+    $response = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project' => 'Website Redesign']]);
 
     $response->assertOk()
         ->assertJsonCount(1, 'result.messages')
@@ -73,16 +73,47 @@ test('allows each workspace role to request a review prompt', function (Workspac
     $workspace = Workspace::factory()->withMember($user, $role)->create();
     $project = Project::factory()->for($workspace)->create(['name' => 'Role review project']);
 
-    $response = reviewPromptAs($user, $workspace, ['project_id' => (string) $project->id]);
+    $response = reviewPromptAs($user, $workspace, ['project' => (string) $project->id]);
 
     $response->assertOk()
         ->assertSee(['"Role review project" (project ID '.$project->id.')', 'project://'.$project->id.'/instructions']);
 })->with(WorkspaceRole::cases());
 
-test('rejects missing invalid and foreign review project arguments', function (Closure $arguments, string $message) {
+test('resolves the review project by ID or by name', function (Closure $argument) {
+    $user = User::factory()->create();
+    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
+    $project = Project::factory()->for($workspace)->create(['name' => 'Website Redesign']);
+    Project::factory()->for($workspace)->create(['name' => 'Billing Improvements']);
+
+    $response = reviewPromptAs($user, $workspace, ['project' => $argument($project)]);
+
+    $response->assertOk()
+        ->assertSee('"Website Redesign" (project ID '.$project->id.')');
+})->with([
+    'ID' => [fn (Project $project): string => (string) $project->id],
+    'exact name' => [fn (Project $project): string => 'Website Redesign'],
+    'name in another case with spaces around' => [fn (Project $project): string => '  website redesign '],
+    'unique part of the name' => [fn (Project $project): string => 'website'],
+]);
+
+test('prefers an exact name over a partial match', function () {
+    $user = User::factory()->create();
+    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
+    $project = Project::factory()->for($workspace)->create(['name' => 'Website']);
+    Project::factory()->for($workspace)->create(['name' => 'Website Redesign']);
+
+    $response = reviewPromptAs($user, $workspace, ['project' => 'website']);
+
+    $response->assertOk()
+        ->assertSee('"Website" (project ID '.$project->id.')');
+});
+
+test('rejects missing ambiguous and foreign review project arguments', function (Closure $arguments, string $message) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $other = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
+    Project::factory()->for($workspace)->create(['name' => 'Billing API']);
+    Project::factory()->for($workspace)->create(['name' => 'Billing Dashboard']);
     $foreign = Project::factory()->create(['name' => 'Secret foreign project', 'instructions' => 'Secret foreign instructions']);
     $inactive = Project::factory()->for($other)->create(['name' => 'Inactive project', 'instructions' => 'Inactive instructions']);
     $before = [$foreign->fresh()->getAttributes(), $inactive->fresh()->getAttributes()];
@@ -90,19 +121,19 @@ test('rejects missing invalid and foreign review project arguments', function (C
     $response = reviewPromptAs($user, $workspace, $arguments($foreign, $inactive));
 
     $response->assertHasErrors([$message])
-        ->assertDontSee(['Secret foreign', 'Inactive project', 'Inactive instructions', 'project://']);
+        ->assertDontSee(['Secret foreign instructions', 'Inactive instructions', 'project://']);
     expect([$foreign->fresh()->getAttributes(), $inactive->fresh()->getAttributes()])->toBe($before);
-    expect(Project::count())->toBe(2);
+    expect(Project::count())->toBe(4);
 })->with([
-    'missing' => [fn (Project $foreign, Project $inactive): array => [], 'The project_id argument is required. Use list_projects to find a project ID.'],
-    'blank' => [fn (Project $foreign, Project $inactive): array => ['project_id' => ''], 'The project_id argument is required. Use list_projects to find a project ID.'],
-    'non-numeric' => [fn (Project $foreign, Project $inactive): array => ['project_id' => 'abc'], 'The project_id must be a positive whole-number project ID.'],
-    'zero' => [fn (Project $foreign, Project $inactive): array => ['project_id' => '0'], 'The project_id must be a positive whole-number project ID.'],
-    'decimal' => [fn (Project $foreign, Project $inactive): array => ['project_id' => '1.5'], 'The project_id must be a positive whole-number project ID.'],
-    'foreign' => [fn (Project $foreign, Project $inactive): array => ['project_id' => (string) $foreign->id], 'The project must belong to the current workspace.'],
-    'other accessible workspace' => [fn (Project $foreign, Project $inactive): array => ['project_id' => (string) $inactive->id], 'The project must belong to the current workspace.'],
-    'missing ID' => [fn (Project $foreign, Project $inactive): array => ['project_id' => '99999'], 'The project must belong to the current workspace.'],
-    'unsupported argument' => [fn (Project $foreign, Project $inactive): array => ['project_id' => (string) $foreign->id, 'workspace_id' => '1'], 'The workspace_id field is not supported here.'],
+    'missing' => [fn (Project $foreign, Project $inactive): array => [], 'The project argument is required. Use list_projects to see the projects in this workspace.'],
+    'blank' => [fn (Project $foreign, Project $inactive): array => ['project' => ''], 'The project argument is required. Use list_projects to see the projects in this workspace.'],
+    'unknown name' => [fn (Project $foreign, Project $inactive): array => ['project' => 'Marketing'], 'No project in the current workspace matches "Marketing". Use list_projects to see the projects in this workspace.'],
+    'wildcard only' => [fn (Project $foreign, Project $inactive): array => ['project' => '%'], 'No project in the current workspace matches "%". Use list_projects to see the projects in this workspace.'],
+    'ambiguous part of a name' => [fn (Project $foreign, Project $inactive): array => ['project' => 'billing'], 'More than one project in the current workspace matches "billing". Use a longer name or the project ID from list_projects.'],
+    'foreign name' => [fn (Project $foreign, Project $inactive): array => ['project' => 'Secret foreign project'], 'No project in the current workspace matches "Secret foreign project". Use list_projects to see the projects in this workspace.'],
+    'other accessible workspace name' => [fn (Project $foreign, Project $inactive): array => ['project' => 'Inactive project'], 'No project in the current workspace matches "Inactive project". Use list_projects to see the projects in this workspace.'],
+    'unsupported argument' => [fn (Project $foreign, Project $inactive): array => ['project' => 'Billing API', 'workspace_id' => '1'], 'The workspace_id field is not supported here.'],
+    'legacy project_id argument' => [fn (Project $foreign, Project $inactive): array => ['project_id' => '1'], 'The project_id field is not supported here.'],
 ]);
 
 test('returns the same protocol error for foreign and missing review projects', function () {
@@ -111,14 +142,16 @@ test('returns the same protocol error for foreign and missing review projects', 
     $foreign = Project::factory()->create(['name' => 'Secret foreign project']);
     $token = $user->createToken('Prompt denial')->plainTextToken;
 
-    $foreignResponse = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project_id' => (string) $foreign->id]]);
+    $foreignResponse = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project' => (string) $foreign->id]]);
     Auth::forgetGuards();
-    $missingResponse = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project_id' => '99999']]);
+    $missingResponse = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project' => '99999']]);
 
     $foreignResponse->assertBadRequest()
         ->assertJsonPath('error.code', -32602)
-        ->assertJsonPath('error.message', 'The project must belong to the current workspace.')
+        ->assertJsonPath('error.message', 'No project in the current workspace matches "'.$foreign->id.'". Use list_projects to see the projects in this workspace.')
         ->assertJsonMissingPath('result')
         ->assertDontSee('Secret foreign project');
-    expect($missingResponse->json('error'))->toBe($foreignResponse->json('error'));
+    $missingResponse->assertBadRequest()
+        ->assertJsonPath('error.code', -32602)
+        ->assertJsonPath('error.message', 'No project in the current workspace matches "99999". Use list_projects to see the projects in this workspace.');
 });

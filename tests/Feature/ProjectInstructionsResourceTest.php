@@ -115,7 +115,7 @@ test('does not mutate data when reading resources or requesting prompts', functi
 
     $resource = mcpJsonRpc($token, $workspace, 'resources/read', ['uri' => 'project://'.$project->id.'/instructions']);
     Auth::forgetGuards();
-    $prompt = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project_id' => (string) $project->id]]);
+    $prompt = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project' => (string) $project->id]]);
 
     $resource->assertOk()
         ->assertJsonPath('result.contents.0.mimeType', 'application/json');
