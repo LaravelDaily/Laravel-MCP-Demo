@@ -1,79 +1,116 @@
 <?php
 
+use App\Enums\WorkspaceRole;
 use App\Livewire\Settings\McpAccess;
 use App\Models\User;
+use App\Models\Workspace;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use Laravel\Passport\Client;
+use Laravel\Passport\ClientRepository;
+use Laravel\Passport\Token;
 use Livewire\Livewire;
 
-test('creates a named MCP token for the authenticated user', function () {
+/**
+ * Connect an MCP client by storing an access token and refresh token the
+ * way a completed authorization-code exchange does.
+ */
+function connectMcpClient(User $user, string $name): Client
+{
+    $client = app(ClientRepository::class)->createAuthorizationCodeGrantClient($name, ['http://localhost:33418/callback'], confidential: false);
+    $token = Token::forceCreate([
+        'id' => Str::random(80),
+        'user_id' => $user->id,
+        'client_id' => $client->id,
+        'scopes' => ['mcp:use'],
+        'revoked' => false,
+        'expires_at' => now()->addHour(),
+    ]);
+    $token->refreshToken()->forceCreate([
+        'id' => Str::random(80),
+        'access_token_id' => $token->id,
+        'revoked' => false,
+        'expires_at' => now()->addDays(30),
+    ]);
+
+    return $client;
+}
+
+test('lists only the current users connected MCP clients', function () {
+    $this->travelTo('2026-10-09 10:00:00');
     $user = User::factory()->create();
-    $foreign = User::factory()->create()->createToken('Foreign client');
+    connectMcpClient($user, 'Claude Code');
+    connectMcpClient(User::factory()->create(), 'Foreign user client');
+    $revoked = connectMcpClient($user, 'Disconnected client');
+    Token::where('client_id', $revoked->id)->update(['revoked' => true]);
 
-    $component = Livewire::actingAs($user)->test(McpAccess::class)
-        ->set('name', '  Claude Code  ')
-        ->call('createToken');
-
-    $component->assertHasNoErrors()
-        ->assertSee('Copy your token now')
-        ->assertDontSee('Foreign client');
-    preg_match('/\d+\|[a-zA-Z0-9]+/', $component->html(), $matches);
-    expect($matches)->toHaveCount(1);
-    $plaintext = $matches[0];
-    preg_match('/<textarea\b[^>]*>(.*?)<\/textarea>/s', $component->html(), $textarea);
-    expect(trim(html_entity_decode($textarea[1], ENT_QUOTES)))->toBe($plaintext);
-    $token = $user->tokens()->sole();
-    expect($token->name)->toBe('Claude Code');
-    expect($token->token)->toBe(hash('sha256', explode('|', $plaintext, 2)[1]));
-    expect($token->expires_at)->toBeNull();
-    $component->assertDontSee($token->token);
-
-    $component->call('$refresh');
-
-    $component->assertDontSee($plaintext)
-        ->assertDontSee($token->token);
-
-    $response = $this->get('/settings/mcp-access');
+    $response = $this->actingAs($user)->get('/settings/mcp-access');
 
     $response->assertOk()
-        ->assertDontSee($plaintext)
-        ->assertDontSee($token->token)
-        ->assertDontSee($foreign->accessToken->token);
+        ->assertSee('Claude Code')
+        ->assertSee('2026-10-09 10:00 UTC')
+        ->assertDontSee('Foreign user client')
+        ->assertDontSee('Disconnected client')
+        ->assertDontSee($user->tokens()->first()->id);
 });
 
-test('rejects blank and oversized MCP token names', function (string $name, string $rule) {
+test('no longer offers copyable MCP tokens', function () {
     $user = User::factory()->create();
 
-    $component = Livewire::actingAs($user)->test(McpAccess::class)
-        ->set('name', $name)
-        ->call('createToken');
+    $response = $this->actingAs($user)->get('/settings/mcp-access');
 
-    $component->assertHasErrors(['name' => $rule]);
+    $response->assertOk()
+        ->assertSee('You have no connected AI clients.')
+        ->assertDontSee('Create token');
+    expect(Schema::hasTable('personal_access_tokens'))->toBeFalse();
+});
 
-    expect($user->tokens()->count())->toBe(0);
-})->with(['blank' => ['   ', 'required'], 'oversized' => [str_repeat('a', 101), 'max']]);
-
-test('revokes only the current users MCP tokens', function () {
+test('disconnecting a client revokes its access and refresh tokens', function () {
     $user = User::factory()->create();
-    $own = $user->createToken('TeamBoard token belonging to the current user');
-    $foreign = User::factory()->create()->createToken('TeamBoard token belonging to another user');
+    $client = connectMcpClient($user, 'Client to disconnect');
+    $kept = connectMcpClient($user, 'Client to keep');
 
     $component = Livewire::actingAs($user)->test(McpAccess::class)
-        ->call('revokeToken', $foreign->accessToken->id);
-
-    $component->assertNotFound();
-    $this->assertModelExists($foreign->accessToken);
-
-    $component = Livewire::actingAs($user)->test(McpAccess::class)
-        ->call('revokeToken', $own->accessToken->id);
+        ->call('disconnect', $client->id);
 
     $component->assertHasNoErrors()
-        ->assertDontSee('TeamBoard token belonging to the current user');
-    $this->assertModelMissing($own->accessToken);
+        ->assertDontSee('Client to disconnect')
+        ->assertSee('Client to keep');
+    $token = Token::where('client_id', $client->id)->sole();
+    expect($token->revoked)->toBeTrue();
+    expect($token->refreshToken->revoked)->toBeTrue();
+    expect(Token::where('client_id', $kept->id)->sole()->revoked)->toBeFalse();
 });
 
-test('guests cannot create or revoke MCP tokens', function (string $action, Closure $arguments) {
+test('a disconnected client can no longer call the MCP endpoint', function () {
     $user = User::factory()->create();
-    $token = $user->createToken('Guest boundary existing token');
+    $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
+    $accessToken = mcpAccessToken($user);
+    $clientId = $user->tokens()->sole()->client_id;
+    Livewire::actingAs($user)->test(McpAccess::class)->call('disconnect', $clientId);
+    Auth::logout();
+    Auth::forgetGuards();
+
+    $response = mcpJsonRpc($accessToken, $workspace, 'tools/list');
+
+    $response->assertUnauthorized();
+});
+
+test('returns 404 when disconnecting another users client', function () {
+    $user = User::factory()->create();
+    $foreign = connectMcpClient(User::factory()->create(), 'Foreign client');
+
+    $component = Livewire::actingAs($user)->test(McpAccess::class)
+        ->call('disconnect', $foreign->id);
+
+    $component->assertNotFound();
+    expect(Token::where('client_id', $foreign->id)->sole()->revoked)->toBeFalse();
+});
+
+test('guests cannot disconnect MCP clients', function () {
+    $user = User::factory()->create();
+    $client = connectMcpClient($user, 'Guest boundary client');
     $page = $this->actingAs($user)->get('/settings/mcp-access');
     preg_match('/wire:snapshot="([^"]+)"/', $page->getContent(), $matches);
     $snapshot = html_entity_decode($matches[1], ENT_QUOTES);
@@ -83,31 +120,11 @@ test('guests cannot create or revoke MCP tokens', function (string $action, Clos
     $response = $this->postJson(Livewire::getUpdateUri(), [
         'components' => [[
             'snapshot' => $snapshot,
-            'updates' => ['name' => 'Guest forged token'],
-            'calls' => [['method' => $action, 'params' => $arguments($token->accessToken->id)]],
+            'updates' => [],
+            'calls' => [['method' => 'disconnect', 'params' => [$client->id]]],
         ]],
     ], ['X-Livewire' => 'true']);
 
     $response->assertUnauthorized();
-    $this->assertModelExists($token->accessToken);
-    expect($user->tokens()->count())->toBe(1);
-})->with([
-    'creation' => ['createToken', fn (int $tokenId): array => []],
-    'revocation' => ['revokeToken', fn (int $tokenId): array => [$tokenId]],
-]);
-
-test('shows creation and last-used times without exposing token hashes', function () {
-    $this->travelTo('2026-10-05 10:00:00');
-    $user = User::factory()->create();
-    $token = $user->createToken('Timestamp display token');
-    $token->accessToken->forceFill(['last_used_at' => '2026-10-05 11:30:00'])->save();
-    $user->createToken('Never-used display token');
-
-    $response = $this->actingAs($user)->get('/settings/mcp-access');
-
-    $response->assertOk()
-        ->assertSee('2026-10-05 10:00 UTC')
-        ->assertSee('2026-10-05 11:30 UTC')
-        ->assertSee('Never')
-        ->assertDontSee($token->accessToken->token);
+    expect(Token::where('client_id', $client->id)->sole()->revoked)->toBeFalse();
 });

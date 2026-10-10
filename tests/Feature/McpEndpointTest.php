@@ -6,7 +6,9 @@ use App\Models\Task;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Workspaces\WorkspaceContext;
+use Carbon\CarbonInterval;
 use Illuminate\Support\Facades\Auth;
+use Laravel\Passport\Passport;
 
 function mcpInitialize(): array
 {
@@ -25,28 +27,39 @@ function mcpListTasks(): array
     ]];
 }
 
-test('returns 401 for missing invalid and revoked MCP bearer tokens', function (Closure $headers) {
+test('returns 401 for missing invalid expired revoked and legacy MCP bearer tokens', function (Closure $headers) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('Revoked transport test token');
-    $token->accessToken->delete();
+    $token = mcpAccessToken($user);
 
-    $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, mcpInitialize(), $headers($token->plainTextToken));
+    $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, mcpInitialize(), $headers($token, $user));
 
     $response->assertUnauthorized()
         ->assertJsonMissingPath('result');
 })->with([
-    'missing' => [fn (string $token): array => []],
-    'invalid' => [fn (string $token): array => ['Authorization' => 'Bearer invalid']],
-    'revoked' => [fn (string $token): array => ['Authorization' => 'Bearer '.$token]],
+    'missing' => [fn (string $token, User $user): array => []],
+    'invalid' => [fn (string $token, User $user): array => ['Authorization' => 'Bearer invalid']],
+    'expired' => [function (string $token, User $user): array {
+        Passport::personalAccessTokensExpireIn(CarbonInterval::minutes(-1));
+        $expiredToken = mcpAccessToken($user);
+        Passport::$personalAccessTokensExpireIn = null;
+
+        return ['Authorization' => 'Bearer '.$expiredToken];
+    }],
+    'revoked' => [function (string $token, User $user): array {
+        $user->tokens()->sole()->revoke();
+
+        return ['Authorization' => 'Bearer '.$token];
+    }],
+    'legacy Sanctum' => [fn (string $token, User $user): array => ['Authorization' => 'Bearer 1|'.str_repeat('a', 40)]],
 ]);
 
-test('authenticates a real Sanctum token at the MCP endpoint', function () {
+test('authenticates a Passport access token at the MCP endpoint', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $task = Task::factory()->for(Project::factory()->for($workspace))->create(['title' => 'Bearer identity permitted task']);
     Task::factory()->create(['title' => 'Bearer identity foreign task']);
-    $token = $user->createToken('Transport client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, mcpListTasks(), ['Authorization' => 'Bearer '.$token]);
 
@@ -60,7 +73,7 @@ test('authenticates a real Sanctum token at the MCP endpoint', function () {
 test('returns 404 for unknown and inaccessible MCP workspace slugs', function (Closure $slug) {
     $user = User::factory()->create();
     $foreign = Workspace::factory()->create(['name' => 'Secret workspace']);
-    $token = $user->createToken('Transport client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$slug($foreign), mcpInitialize(), ['Authorization' => 'Bearer '.$token]);
 
@@ -77,7 +90,7 @@ test('uses the MCP workspace URL instead of the browser session', function () {
     $second = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
     $firstTask = Task::factory()->for(Project::factory()->for($first))->create(['title' => 'First workspace task']);
     $secondTask = Task::factory()->for(Project::factory()->for($second))->create(['title' => 'Second workspace task']);
-    $token = $user->createToken('Multi-workspace transport client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->withSession([WorkspaceContext::SESSION_KEY => $first->id])
         ->postJson('/mcp/workspaces/'.$second->slug, mcpListTasks(), ['Authorization' => 'Bearer '.$token]);

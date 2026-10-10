@@ -21,7 +21,7 @@ function reviewPromptAs(User $user, Workspace $workspace, array $arguments): Tes
 test('discovers project_review with a required project argument', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
-    $token = $user->createToken('Prompt discovery')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = mcpJsonRpc($token, $workspace, 'prompts/list');
 
@@ -42,7 +42,7 @@ test('generates a review prompt for the selected workspace project', function ()
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create(['name' => 'Review workspace']);
     $project = Project::factory()->for($workspace)->create(['name' => 'Website Redesign']);
-    $token = $user->createToken('Prompt client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project' => 'Website Redesign']]);
 
@@ -140,7 +140,7 @@ test('returns the same protocol error for foreign and missing review projects', 
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $foreign = Project::factory()->create(['name' => 'Secret foreign project']);
-    $token = $user->createToken('Prompt denial')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $foreignResponse = mcpJsonRpc($token, $workspace, 'prompts/get', ['name' => 'project_review', 'arguments' => ['project' => (string) $foreign->id]]);
     Auth::forgetGuards();

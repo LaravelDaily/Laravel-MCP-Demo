@@ -5,29 +5,45 @@ namespace App\Livewire\Settings;
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Laravel\Passport\Token;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 #[Title('MCP access')]
 class McpAccess extends Component
 {
-    public string $name = '';
-
-    protected ?string $plainTextToken = null;
-
-    public function createToken(): void
+    /**
+     * Revoke every access and refresh token the current user granted to one
+     * OAuth client. The client must authorize again to reconnect.
+     */
+    public function disconnect(string $clientId): void
     {
-        $user = $this->user();
-        $this->name = trim($this->name);
-        $this->validate(['name' => ['required', 'string', 'max:100']]);
+        $tokens = $this->activeTokens()->where('client_id', $clientId);
 
-        $this->plainTextToken = $user->createToken($this->name)->plainTextToken;
-        $this->reset('name');
+        if ($tokens->isEmpty()) {
+            throw new ModelNotFoundException;
+        }
+
+        DB::transaction(function () use ($tokens): void {
+            foreach ($tokens as $token) {
+                $token->revoke();
+                $token->refreshToken?->revoke();
+            }
+        });
     }
 
-    public function revokeToken(int $tokenId): void
+    /**
+     * @return Collection<int, Token>
+     */
+    protected function activeTokens(): Collection
     {
-        $this->user()->tokens()->findOrFail($tokenId)->delete();
+        return $this->user()->tokens()
+            ->where('revoked', false)
+            ->with(['client', 'refreshToken'])
+            ->get();
     }
 
     protected function user(): User
@@ -43,9 +59,18 @@ class McpAccess extends Component
 
     public function render(): View
     {
+        $connections = $this->activeTokens()
+            ->groupBy('client_id')
+            ->map(fn (Collection $tokens): array => [
+                'client_id' => $tokens->first()->client_id,
+                'name' => $tokens->first()->client->name,
+                'authorized_at' => $tokens->min('created_at'),
+            ])
+            ->sortBy('authorized_at')
+            ->values();
+
         return view('livewire.settings.mcp-access', [
-            'plainTextToken' => $this->plainTextToken,
-            'tokens' => $this->user()->tokens()->orderBy('id')->get(['id', 'name', 'created_at', 'last_used_at']),
+            'connections' => $connections,
         ]);
     }
 }

@@ -9,7 +9,7 @@ TeamBoard is a small multi-tenant Laravel SaaS with workspaces, projects, tasks,
 - Node.js 22 and npm (used for the frontend build and for Node-based MCP clients such as Inspector)
 - An HTTPS local URL for MCP clients; with Herd, `herd secure teamboard`
 
-The application uses Laravel 13, Livewire 4, Flux 2 (free edition), Laravel MCP 1.0, Laravel Sanctum 4, Pest 5, Larastan, and Pint. Exact versions are locked in `composer.lock` and `package-lock.json`.
+The application uses Laravel 13, Livewire 4, Flux 2 (free edition), Laravel MCP 1.0, Laravel Passport 13, Pest 5, Larastan, and Pint. Exact versions are locked in `composer.lock` and `package-lock.json`.
 
 ## Local setup
 
@@ -17,10 +17,13 @@ The application uses Laravel 13, Livewire 4, Flux 2 (free edition), Laravel MCP 
 composer install
 cp .env.example .env
 php artisan key:generate
+php artisan passport:keys
 php artisan migrate --seed
 npm install
 npm run build
 ```
+
+`passport:keys` writes `storage/oauth-private.key` and `storage/oauth-public.key`, which sign and verify OAuth access tokens. They are gitignored; never commit them. On a server without a writable key file, set `PASSPORT_PRIVATE_KEY` and `PASSPORT_PUBLIC_KEY` instead.
 
 If `database/database.sqlite` does not exist, create it first (`touch database/database.sqlite`) or accept `php artisan migrate`'s offer to create it. Seeding creates the demo workspaces and accounts below. For an existing local database, run `php artisan migrate`, then `php artisan db:seed` if demo data is missing. The demo seeder warns and does nothing when demo workspaces already exist; do not reset a database containing data you need.
 
@@ -79,7 +82,7 @@ Any member, including a viewer, may be assigned a task. Comment authors always c
 
 TeamBoard keeps three questions separate:
 
-1. **Identity** — who is calling? The browser uses the starter kit's session login; the MCP endpoint uses a Sanctum bearer token. Neither carries a role.
+1. **Identity** — who is calling? The browser uses the starter kit's session login; the MCP endpoint uses an OAuth access token issued by Passport. Neither carries a role, and OAuth has a single `mcp:use` scope: roles are never mapped to OAuth scopes.
 2. **Membership** — may this user use this workspace? The selected workspace (browser switcher or MCP URL) must be one of the user's memberships. Foreign and missing workspaces or records are reported as not found (404 on the web), so responses never reveal that they exist.
 3. **Policies** — what may this user do here? The workspace, project, task, and comment policies check the user's role in the selected workspace. A role denial inside an accessible workspace is 403 on the web and a specific error message over MCP.
 
@@ -106,21 +109,31 @@ vendor/bin/pint --dirty --format agent
 npm run build
 ```
 
-`composer types:check` runs Larastan (PHPStan level 7). The tests use an in-memory SQLite database and the array cache, so they never touch your local data, and they include real bearer-token HTTP JSON-RPC requests against the MCP endpoint. They do not replace a check with a real MCP client.
+`composer types:check` runs Larastan (PHPStan level 7). The tests use an in-memory SQLite database and the array cache, so they never touch your local data, and they include real bearer-token HTTP JSON-RPC requests against the MCP endpoint plus the complete OAuth flow (discovery, client registration, consent, PKCE code exchange, refresh, and revocation). Tests generate their own Passport keys in memory. They do not replace a check with a real MCP client.
 
 ## MCP connection
 
-### Tokens
+### OAuth
 
-Log in and open **Settings → MCP access** (`/settings/mcp-access`). Create a named personal access token (name up to 100 characters) and copy it immediately: plaintext is shown only on creation. The list shows creation and last-used times in UTC. Tokens do not expire; **revocation is the control** — revoke a token from this page when it is no longer needed, and requests with it receive 401 from then on. Stored hashes and other users' tokens are never displayed. Tokens have no owner/member/viewer abilities: what a token can do follows its user's role in each workspace. Never commit tokens to Git or paste them into shared files.
+The MCP endpoint uses OAuth 2.1 through Laravel Passport and Laravel MCP's OAuth helpers. There are no tokens to copy: you add the server URL to your client, and the client does the rest.
+
+1. The client calls the MCP URL without a token and receives 401 with `WWW-Authenticate: Bearer realm="mcp", resource_metadata="…/.well-known/oauth-protected-resource/mcp/workspaces/{slug}"`.
+2. It reads that metadata and `/.well-known/oauth-authorization-server` to find the authorization, token, and registration endpoints.
+3. It registers itself at `POST /oauth/register` (dynamic client registration) and receives a public `client_id` with the `mcp:use` scope. Only `http://localhost` redirect URIs are accepted, configured in `config/mcp.php` (`redirect_domains`).
+4. Your browser opens `/oauth/authorize`. Log in if needed, check **Logged in as** on the consent screen, and click **Approve** (or **Deny**).
+5. The client exchanges the authorization code with its PKCE verifier at `/oauth/token` and receives an access token (valid for one hour) and a refresh token (valid for 30 days). The client refreshes the access token on its own.
+
+**Settings → MCP access** (`/settings/mcp-access`) lists the clients you have approved, with the time of approval in UTC. **Disconnect** revokes the client's access and refresh tokens, and its next request receives 401; the client must be approved again to reconnect. What a connected client can do follows its user's role in each workspace.
+
+The token-based connection used through lesson 06 is still available at the `course/06-production-basics` tag.
 
 ### Workspace endpoints
 
-The MCP endpoint is `https://teamboard.test/mcp/workspaces/{slug}`; demo slugs are `acme`, `sandbox`, and `globex`. Each workspace is a separate MCP server URL, and one token can connect to every workspace its user belongs to. Send `Authorization: Bearer <token>` on every request. Browser sessions are not accepted for MCP authentication. The URL selects the workspace independently of the browser switcher. Missing, invalid, or revoked tokens receive 401; unknown or inaccessible workspace slugs receive 404 without workspace details. Only HTTP POST is supported (GET and DELETE return 405).
+The MCP endpoint is `https://teamboard.test/mcp/workspaces/{slug}`; demo slugs are `acme`, `sandbox`, and `globex`. Each workspace is a separate MCP server URL, and one approval lets a client use every workspace URL its user belongs to (each URL still needs its own client connection). Clients send `Authorization: Bearer <access token>` on every request. Browser sessions are not accepted for MCP authentication. The URL selects the workspace independently of the browser switcher. Missing, invalid, expired, or revoked tokens receive 401; unknown or inaccessible workspace slugs receive 404 without workspace details. Only HTTP POST is supported (GET and DELETE return 405).
 
 ### Rate limiting
 
-MCP requests are rate limited per authenticated user: by default 60 JSON-RPC requests per minute, shared across every workspace URL and every token of that user, and applied to all methods including `initialize` and `tools/list`. Authentication runs first, so requests with missing or invalid tokens receive 401 and do not use anyone's budget. When the budget is exhausted the endpoint returns HTTP 429 with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` headers, and the rejected request is not executed. Set `TEAMBOARD_MCP_RATE_LIMIT` in `.env` (config key `teamboard.mcp_rate_limit_per_minute`) to change the limit, for example `TEAMBOARD_MCP_RATE_LIMIT=5` to demonstrate a 429; run `php artisan config:clear` afterwards if configuration is cached, and restore the value when done. Counters use the default cache store (`CACHE_STORE=database` locally), so no Redis or other distributed cache is required.
+MCP requests are rate limited per authenticated user: by default 60 JSON-RPC requests per minute, shared across every workspace URL and every connected client of that user, and applied to all methods including `initialize` and `tools/list`. Authentication runs first, so requests with missing or invalid tokens receive 401 and do not use anyone's budget. When the budget is exhausted the endpoint returns HTTP 429 with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` headers, and the rejected request is not executed. Set `TEAMBOARD_MCP_RATE_LIMIT` in `.env` (config key `teamboard.mcp_rate_limit_per_minute`) to change the limit, for example `TEAMBOARD_MCP_RATE_LIMIT=5` to demonstrate a 429; run `php artisan config:clear` afterwards if configuration is cached, and restore the value when done. Counters use the default cache store (`CACHE_STORE=database` locally), so no Redis or other distributed cache is required.
 
 ### Read tools
 
@@ -164,7 +177,7 @@ Tool discovery follows your role in the URL-selected workspace, checked on every
 | Member | Eleven: six read tools and the five writes above, without `delete_task` |
 | Viewer | Six read tools only |
 
-The same token can see different tool sets on different workspace URLs: Dana sees all twelve tools on `/acme` (owner) and only the six read tools on `/sandbox` (viewer). Hidden tools are a usability filter, not the security boundary: calling a hidden tool by name is rejected as an unknown tool, and every write still runs through the shared policies and task actions, so a guessed name cannot change data. Reconnect your client after a role change to refresh its tool list.
+The same user can see different tool sets on different workspace URLs: Dana sees all twelve tools on `/acme` (owner) and only the six read tools on `/sandbox` (viewer). Hidden tools are a usability filter, not the security boundary: calling a hidden tool by name is rejected as an unknown tool, and every write still runs through the shared policies and task actions, so a guessed name cannot change data. Reconnect your client after a role change to refresh its tool list.
 
 ### Project instructions resource and review prompt
 
@@ -184,19 +197,18 @@ Workspace owners see **MCP audit log** in the sidebar (`https://teamboard.test/m
 
 ### Claude Code
 
-[Claude Code HTTP setup](https://code.claude.com/docs/en/mcp): from a terminal in this project, read the token without adding it to shell history (zsh):
+[Claude Code HTTP setup](https://code.claude.com/docs/en/mcp): add the server by URL only, with no header:
 
 ```bash
-read -rs 'TEAMBOARD_TOKEN?Paste your MCP token: '; echo
 claude mcp add --transport http --scope local teamboard-acme \
-  https://teamboard.test/mcp/workspaces/acme \
-  --header "Authorization: Bearer $TEAMBOARD_TOKEN"
-unset TEAMBOARD_TOKEN
+  https://teamboard.test/mcp/workspaces/acme
 export NODE_EXTRA_CA_CERTS="$HOME/Library/Application Support/Herd/config/valet/CA/LaravelValetCASelfSigned.pem"
 claude
 ```
 
-The `NODE_EXTRA_CA_CERTS` path is Herd's default CA location on macOS; adjust it for your environment so Node-based clients trust the local certificate. Keep TLS verification enabled. The local scope keeps credentials out of a project `.mcp.json`; never commit tokens or client secrets.
+Inside Claude Code, run `/mcp`, pick `teamboard-acme`, and choose **Authenticate**. Your browser opens TeamBoard: log in as the demo user, check **Logged in as**, and click **Approve**. Claude Code stores the tokens itself and refreshes them.
+
+The `NODE_EXTRA_CA_CERTS` path is Herd's default CA location on macOS; adjust it for your environment so Node-based clients trust the local certificate. Keep TLS verification enabled. The local scope keeps the server out of a project `.mcp.json`.
 
 Run `/mcp` inside Claude Code and check the connection. Try the read tools without changing data:
 
@@ -212,7 +224,7 @@ Expect only Acme data.
 
 **Write workflow.** As Alice, ask Claude Code to use `list_projects` to find Website Redesign, then `create_task` with the title "MCP demo task". Keep the returned task ID and work only on that task. Use `update_task` to set its description and priority; use `list_workspace_members` to find Bob, then `assign_task` with his ID; use `move_task` to set `in_progress`; and use `add_comment` with the body "MCP workflow checked". Use `get_task` to verify metadata, assignment, status, and comment author. Finally use `delete_task` on that test task only, and confirm with `get_task` that it is no longer found. Open **MCP audit log** as Alice in the browser to see one entry per write, newest first, including the deletion.
 
-**Roles and tenants.** Connect a separate local server for each demo user with that user's own token (for example `teamboard-acme-bob`, `teamboard-acme-charlie`, and `teamboard-sandbox-dana` for `https://teamboard.test/mcp/workspaces/sandbox`). Run `/mcp` to inspect each server's tools: Bob has no `delete_task`, Charlie and Dana's Sandbox connection have only read tools. Asking Bob's connection to call `delete_task` on a task ID fails as an unknown tool and the task remains. To test tenant denial, add another local server named `teamboard-globex` with Alice's token and the URL ending `/globex`; it must fail with 404.
+**Roles and tenants.** Connect a separate local server for each demo user (for example `teamboard-acme-bob`, `teamboard-acme-charlie`, and `teamboard-sandbox-dana` for `https://teamboard.test/mcp/workspaces/sandbox`). Authenticate each one as its own user: the browser reuses your TeamBoard session, so log out (or use the consent screen's **Logged in as** line to check) before approving as the next user. Run `/mcp` to inspect each server's tools: Bob has no `delete_task`, Charlie and Dana's Sandbox connection have only read tools. Asking Bob's connection to call `delete_task` on a task ID fails as an unknown tool and the task remains. To test tenant denial, add another local server named `teamboard-globex` with the URL ending `/globex` and authenticate it as Alice; its requests must fail with 404.
 
 **Resource and prompt.**
 
@@ -220,35 +232,9 @@ Expect only Acme data.
 - Prompt: type `/` and pick `/teamboard-acme:project_review (MCP)`, or run `/mcp__teamboard-acme__project_review website` (a project name, part of one, or an ID such as `1`). Claude then performs the review with the read tools; approve the tool calls as usual.
 - Try `project://4/instructions` or `/mcp__teamboard-acme__project_review payroll` (a Globex project) to see the not-found error without Globex details.
 
-**Revocation.** Revoke the token in Settings → MCP access, reconnect the Acme server in `/mcp`, and confirm authentication fails.
+**Revocation.** Click **Disconnect** next to the client in Settings → MCP access, then ask Claude Code to use the server again: the request fails with 401 until you authenticate again in `/mcp`.
 
 ### Inspector
 
-Read `TEAMBOARD_TOKEN` again with the hidden prompt above before running [Inspector CLI](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md) with the same endpoint and header. Use an unrevoked token:
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector)'s browser UI (`npx -y @modelcontextprotocol/inspector`) can run the same OAuth flow against `https://teamboard.test/mcp/workspaces/acme`; it needs the same `NODE_EXTRA_CA_CERTS` setting as Claude Code. The Inspector CLI examples with a pasted bearer token apply to the `course/06-production-basics` tag. To see the rate limit, set `TEAMBOARD_MCP_RATE_LIMIT=5` and make several requests within a minute; they soon fail with HTTP 429. Restore the value afterwards.
 
-```bash
-npx -y @modelcontextprotocol/inspector --cli \
-  https://teamboard.test/mcp/workspaces/acme --transport http \
-  --method tools/list --header "Authorization: Bearer $TEAMBOARD_TOKEN"
-npx -y @modelcontextprotocol/inspector --cli \
-  https://teamboard.test/mcp/workspaces/acme --transport http \
-  --method tools/call --tool-name list_tasks --tool-arg per_page=2 \
-  --header "Authorization: Bearer $TEAMBOARD_TOKEN"
-npx -y @modelcontextprotocol/inspector --cli \
-  https://teamboard.test/mcp/workspaces/acme --transport http \
-  --method resources/templates/list --header "Authorization: Bearer $TEAMBOARD_TOKEN"
-npx -y @modelcontextprotocol/inspector --cli \
-  https://teamboard.test/mcp/workspaces/acme --transport http \
-  --method resources/read --uri project://1/instructions \
-  --header "Authorization: Bearer $TEAMBOARD_TOKEN"
-npx -y @modelcontextprotocol/inspector --cli \
-  https://teamboard.test/mcp/workspaces/acme --transport http \
-  --method prompts/list --header "Authorization: Bearer $TEAMBOARD_TOKEN"
-npx -y @modelcontextprotocol/inspector --cli \
-  https://teamboard.test/mcp/workspaces/acme --transport http \
-  --method prompts/get --prompt-name project_review --prompt-args project=website \
-  --header "Authorization: Bearer $TEAMBOARD_TOKEN"
-unset TEAMBOARD_TOKEN
-```
-
-Inspector needs the same `NODE_EXTRA_CA_CERTS` setting as Claude Code. To see the rate limit, set `TEAMBOARD_MCP_RATE_LIMIT=5` and repeat the `tools/list` command within a minute. Each Inspector CLI run sends several JSON-RPC requests (initialization plus the method), so a run soon fails with HTTP 429. Restore the value afterwards.

@@ -1,8 +1,12 @@
 <?php
 
+use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
+use Laravel\Mcp\Server\Registrar;
+use Laravel\Passport\Client;
+use Laravel\Passport\ClientRepository;
 use Tests\TestCase;
 
 /*
@@ -61,4 +65,21 @@ function mcpJsonRpc(string $token, Workspace $workspace, string $method, array $
     return test()->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0', 'id' => 1, 'method' => $method, 'params' => (object) $params,
     ], ['Authorization' => 'Bearer '.$token]);
+}
+
+/**
+ * Issue a real Passport access token with the MCP scope for the given user.
+ * Tests that are not about the OAuth flow itself use this shortcut instead
+ * of the full authorization-code exchange.
+ */
+function mcpAccessToken(User $user): string
+{
+    $hasPersonalAccessClient = Client::query()->get()
+        ->contains(fn (Client $client): bool => $client->hasGrantType('personal_access'));
+
+    if (! $hasPersonalAccessClient) {
+        app(ClientRepository::class)->createPersonalAccessGrantClient('TeamBoard test client', 'users');
+    }
+
+    return $user->createToken('MCP test token', [Registrar::OAUTH_SCOPE])->accessToken;
 }

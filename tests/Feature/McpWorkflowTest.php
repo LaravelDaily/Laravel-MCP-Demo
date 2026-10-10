@@ -26,7 +26,7 @@ test('completes an authenticated MCP task workflow with an audit trail', functio
     $project = Project::factory()->for($workspace)->create(['name' => 'Website Redesign']);
     $untouched = Task::factory()->for($project)->create(['title' => 'Existing seeded-style task']);
     $untouchedBefore = $untouched->fresh()->getAttributes();
-    $token = $owner->createToken('Workflow client')->plainTextToken;
+    $token = mcpAccessToken($owner);
 
     $created = workflowToolCall($token, $workspace, 'create_task', ['project_id' => $project->id, 'title' => 'Workflow task', 'description' => 'Acceptance criteria: works end to end.']);
     $taskId = $created->json('result.structuredContent.id');

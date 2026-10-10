@@ -197,7 +197,7 @@ test('rejects unsupported read arguments', function (string $argument) {
 test('advertises read tool names schemas and safety metadata', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
-    $token = $user->createToken('Discovery')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0',
@@ -224,7 +224,7 @@ test('returns structured task results and a matching JSON text fallback over bea
     $other = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
     $task = Task::factory()->for(Project::factory()->for($workspace))->create(['title' => 'Token reader task']);
     Task::factory()->for(Project::factory()->for($other))->create(['title' => 'Wrong workspace']);
-    $token = $user->createToken('Client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->withSession([WorkspaceContext::SESSION_KEY => $other->id])
         ->postJson('/mcp/workspaces/'.$workspace->slug, [

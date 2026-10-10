@@ -15,7 +15,7 @@ test('discovers the project instructions resource template', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
     Project::factory()->for($workspace)->create();
-    $token = $user->createToken('Resource discovery')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = mcpJsonRpc($token, $workspace, 'resources/templates/list');
 
@@ -32,7 +32,7 @@ test('does not list each project as a static resource', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     Project::factory()->count(2)->for($workspace)->create();
-    $token = $user->createToken('Static resource discovery')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = mcpJsonRpc($token, $workspace, 'resources/list');
 
@@ -49,7 +49,7 @@ test('reads project instructions for every workspace role', function (WorkspaceR
         'instructions' => "Acceptance criteria are required.\nBugs need reproduction steps.",
     ]);
     Project::factory()->for($workspace)->create(['instructions' => 'Sibling project instructions']);
-    $token = $user->createToken('Resource reader')->plainTextToken;
+    $token = mcpAccessToken($user);
     $uri = 'project://'.$project->id.'/instructions';
 
     $response = mcpJsonRpc($token, $workspace, 'resources/read', ['uri' => $uri]);
@@ -84,7 +84,7 @@ test('rejects foreign missing and malformed project resource URIs', function (Cl
     $other = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $foreign = Project::factory()->create(['name' => 'Secret foreign project', 'description' => 'Secret foreign description', 'instructions' => 'Secret foreign instructions']);
     $inactive = Project::factory()->for($other)->create(['name' => 'Inactive project', 'description' => 'Inactive description', 'instructions' => 'Inactive instructions']);
-    $token = $user->createToken('Resource denial')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = mcpJsonRpc($token, $workspace, 'resources/read', ['uri' => $uri($foreign, $inactive)]);
 
@@ -111,7 +111,7 @@ test('does not mutate data when reading resources or requesting prompts', functi
     $task = Task::factory()->for($project)->assignedTo($user)->create();
     $comment = Comment::factory()->for($task)->for($user, 'author')->create();
     $before = [$project->fresh()->getAttributes(), $task->fresh()->getAttributes(), $comment->fresh()->getAttributes()];
-    $token = $user->createToken('Read-only context client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $resource = mcpJsonRpc($token, $workspace, 'resources/read', ['uri' => 'project://'.$project->id.'/instructions']);
     Auth::forgetGuards();

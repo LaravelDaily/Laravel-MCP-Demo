@@ -30,7 +30,7 @@ function callGuessedTool(string $token, Workspace $workspace, string $name, arra
 test('discovers all tools for owners', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('Owner discovery')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = discoverTools($token, $workspace);
 
@@ -44,7 +44,7 @@ test('hides delete_task from members', function () {
     $task = Task::factory()->for(Project::factory()->for($workspace))->create(['title' => 'Member cannot delete']);
     $comment = Comment::factory()->for($task)->create();
     $before = $task->fresh()->getAttributes();
-    $token = $user->createToken('Member discovery')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $discovery = discoverTools($token, $workspace);
     Auth::forgetGuards();
@@ -68,7 +68,7 @@ test('hides every write tool from viewers', function (string $name, Closure $arg
     $task = Task::factory()->for(Project::factory()->for($workspace))->create();
     $comment = Comment::factory()->for($task)->create();
     $before = $task->fresh()->getAttributes();
-    $token = $user->createToken('Viewer discovery')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $discovery = discoverTools($token, $workspace);
     Auth::forgetGuards();
@@ -96,7 +96,7 @@ test('uses the selected workspaces role for tool discovery', function () {
     $user = User::factory()->create();
     $ownedWorkspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $viewedWorkspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
-    $token = $user->createToken('Multi-workspace discovery')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $ownerDiscovery = discoverTools($token, $ownedWorkspace);
     Auth::forgetGuards();
@@ -112,7 +112,7 @@ test('uses the selected workspaces role for tool discovery', function () {
 test('updates discovery after a role change between requests', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('Role change discovery')->plainTextToken;
+    $token = mcpAccessToken($user);
     $ownerDiscovery = discoverTools($token, $workspace);
     $workspace->memberships()->where('user_id', $user->id)->update(['role' => WorkspaceRole::Member->value]);
     Auth::forgetGuards();

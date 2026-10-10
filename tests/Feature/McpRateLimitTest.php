@@ -13,7 +13,7 @@ test('returns 429 after the per-user MCP request limit is exhausted', function (
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $project = Project::factory()->for($workspace)->create();
-    $token = $user->createToken('Rate limited client')->plainTextToken;
+    $token = mcpAccessToken($user);
     $methods = [
         ['initialize', ['protocolVersion' => '2025-11-25', 'capabilities' => (object) [], 'clientInfo' => ['name' => 'Rate limit test', 'version' => '1.0.0']]],
         ['tools/list', []],
@@ -42,8 +42,8 @@ test('shares a users rate limit across workspace connections', function () {
     $user = User::factory()->create();
     $first = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $second = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
-    $firstToken = $user->createToken('First workspace client')->plainTextToken;
-    $secondToken = $user->createToken('Second workspace client')->plainTextToken;
+    $firstToken = mcpAccessToken($user);
+    $secondToken = mcpAccessToken($user);
     mcpJsonRpc($firstToken, $first, 'tools/list')->assertOk();
     Auth::forgetGuards();
     mcpJsonRpc($secondToken, $second, 'tools/list')->assertOk();
@@ -62,8 +62,8 @@ test('does not share rate limits between different users', function () {
     $limited = User::factory()->create();
     $other = User::factory()->create();
     $workspace = Workspace::factory()->withMember($limited, WorkspaceRole::Owner)->withMember($other, WorkspaceRole::Member)->create();
-    $limitedToken = $limited->createToken('Exhausted client')->plainTextToken;
-    $otherToken = $other->createToken('Independent client')->plainTextToken;
+    $limitedToken = mcpAccessToken($limited);
+    $otherToken = mcpAccessToken($other);
     mcpJsonRpc($limitedToken, $workspace, 'tools/list')->assertOk();
     mcpJsonRpc($limitedToken, $workspace, 'tools/list')->assertTooManyRequests();
     Auth::forgetGuards();
@@ -79,7 +79,7 @@ test('resumes MCP access after the rate limit window', function () {
     config(['teamboard.mcp_rate_limit_per_minute' => 1]);
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('Patient client')->plainTextToken;
+    $token = mcpAccessToken($user);
     mcpJsonRpc($token, $workspace, 'tools/list')->assertOk();
     $this->travel(59)->seconds();
     mcpJsonRpc($token, $workspace, 'tools/list')->assertTooManyRequests()->assertHeader('Retry-After', '1');
@@ -95,7 +95,7 @@ test('authenticates before counting MCP requests against the limit', function ()
     config(['teamboard.mcp_rate_limit_per_minute' => 1]);
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('Unaffected client')->plainTextToken;
+    $token = mcpAccessToken($user);
     mcpJsonRpc('invalid', $workspace, 'tools/list')->assertUnauthorized();
     mcpJsonRpc('invalid', $workspace, 'tools/list')->assertUnauthorized();
 

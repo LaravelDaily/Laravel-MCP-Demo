@@ -136,7 +136,7 @@ test('does not audit reads resources prompts or web mutations as MCP writes', fu
     $project = Project::factory()->for($workspace)->create(['instructions' => 'Write acceptance criteria.']);
     $task = Task::factory()->for($project)->create();
     $deletable = Task::factory()->for($project)->create();
-    $token = $owner->createToken('Read-only audit check')->plainTextToken;
+    $token = mcpAccessToken($owner);
 
     $reads = [
         mcpJsonRpc($token, $workspace, 'tools/call', ['name' => 'list_tasks', 'arguments' => (object) []]),
@@ -171,7 +171,7 @@ test('does not create success audits for failed MCP mutations', function (string
     $foreign = Task::factory()->create();
     $before = $task->fresh()->getAttributes();
     $foreignBefore = $foreign->fresh()->getAttributes();
-    $token = $member->createToken('Failed mutation client')->plainTextToken;
+    $token = mcpAccessToken($member);
 
     $response = mcpJsonRpc($token, $workspace, 'tools/call', ['name' => $name, 'arguments' => $arguments($task, $foreign)]);
 
@@ -234,7 +234,7 @@ test('keeps secrets and full content out of audit records', function () {
     $owner = User::factory()->create();
     $workspace = Workspace::factory()->withMember($owner, WorkspaceRole::Owner)->create();
     $project = Project::factory()->for($workspace)->create();
-    $token = $owner->createToken('Secret-bearing client')->plainTextToken;
+    $token = mcpAccessToken($owner);
     $description = str_repeat('Confidential roadmap detail. ', 300);
     $body = str_repeat('Sensitive customer quote. ', 190);
 
@@ -257,7 +257,7 @@ test('keeps secrets and full content out of audit records', function () {
     expect(McpAuditLog::count())->toBe(3);
     expect($stored)
         ->not->toContain($token)
-        ->not->toContain(explode('|', $token)[1])
+        ->not->toContain($owner->tokens()->sole()->id)
         ->not->toContain('Confidential roadmap detail')
         ->not->toContain('Sensitive customer quote');
 });

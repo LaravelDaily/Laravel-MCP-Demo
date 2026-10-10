@@ -291,7 +291,7 @@ test('rejects foreign and missing write records without disclosing existence', f
     $other = $otherWorkspace($user);
     $foreign = Task::factory()->for(Project::factory()->for($other))->create(['title' => 'Private foreign title']);
     $before = $foreign->fresh()->getAttributes();
-    $token = $user->createToken('Record scope check')->plainTextToken;
+    $token = mcpAccessToken($user);
     $foreignArguments = $arguments($foreign);
     $missingArguments = array_replace($foreignArguments, array_fill_keys(array_intersect(array_keys($foreignArguments), ['project_id', 'task_id']), 999999));
 
@@ -376,7 +376,7 @@ test('rejects missing and malformed update task IDs without mutations', function
 test('advertises metadata mutation schemas and accurate safety annotations', function (int $index, string $name, array $required) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('Write schema client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list',
@@ -407,7 +407,7 @@ test('advertises metadata mutation schemas and accurate safety annotations', fun
 test('publishes nullable creation assignment and medium default priority', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('Creation schema client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list',
@@ -425,7 +425,7 @@ test('creates and updates through bearer HTTP with matching structured and text 
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create();
     $other = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $project = Project::factory()->for($workspace)->create();
-    $token = $user->createToken('Metadata workflow client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $created = $this->withSession([WorkspaceContext::SESSION_KEY => $other->id])->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call',
@@ -581,7 +581,7 @@ test('rejects invalid comments without creating a record', function (array $inpu
 test('advertises ordinary mutation schemas and safety annotations', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create();
-    $token = $user->createToken('Ordinary schema client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list',
@@ -620,7 +620,7 @@ test('assigns moves and comments through bearer HTTP with matching structured an
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Member)->create();
     $other = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
     $task = Task::factory()->for(Project::factory()->for($workspace))->create();
-    $token = $user->createToken('Ordinary workflow client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     foreach ([
         'assign_task' => ['assignee_id' => $user->id],
@@ -713,7 +713,7 @@ test('reports a repeated deletion as a missing record', function () {
 test('advertises mutation schemas and destructive deletion metadata', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Owner)->create();
-    $token = $user->createToken('Deletion schema client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list',

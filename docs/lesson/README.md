@@ -11,8 +11,7 @@ Each lesson explains code that already exists at a Git tag. You do not build any
 | 04 | [Permissions, tenant isolation, and dangerous tools](04-permissions.md) | `course/03-write-tools` | `course/04-permissions` |
 | 05 | [Resources and prompts: ship ready-made workflows](05-resources-prompts.md) | `course/04-permissions` | `course/05-resources-prompts` |
 | 06 | [Production basics](06-production-basics.md) | `course/05-resources-prompts` | `course/06-production-basics` |
-
-Lesson 07 (Passport OAuth) is recorded separately later.
+| 07 | [OAuth with Passport](07-oauth.md) | `course/06-production-basics` | `course/07-oauth` |
 
 ## Preparing a lesson for recording
 
@@ -65,6 +64,8 @@ IDs are stable after `migrate:fresh --seed`, so the prompts below use them direc
 Acme tasks worth knowing: **Investigate failed Stripe webhook** (high priority, in progress, assigned to Alice, overdue, three comments), **Redesign pricing page** (high, in progress, Alice, two comments), **Prepare launch checklist** (unassigned), **Improve subscription cancellation flow** (done, Bob).
 
 ## Connecting Claude Code (lessons 01–06)
+
+Lesson 07 replaces this token setup with OAuth; its connection steps are in [07-oauth.md](07-oauth.md).
 
 Create a token as the demo user in **Settings → MCP access**, then add one local server per user and workspace:
 

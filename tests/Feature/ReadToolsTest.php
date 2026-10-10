@@ -160,7 +160,7 @@ test('rejects foreign and missing task IDs without disclosing existence', functi
     $other = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
     $foreign = Task::factory()->create(['title' => 'Secret foreign task', 'description' => 'Secret description']);
     $inactive = Task::factory()->for(Project::factory()->for($other))->create(['title' => 'Inactive workspace task']);
-    $token = $user->createToken('Task detail denial')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call',
@@ -378,7 +378,7 @@ test('search_tasks treats wildcard characters as literal search text', function 
 test('advertises the complete read surface with strict schemas and safety metadata', function (int $index, string $name, array $required, array $outputRequired) {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
-    $token = $user->createToken('Read discovery client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list',
@@ -410,7 +410,7 @@ test('keeps structured and fallback results equivalent without mutating domain d
     $task = Task::factory()->for($project)->assignedTo($user)->create(['title' => 'Readable task']);
     $comment = Comment::factory()->for($task)->for($user, 'author')->create();
     $before = [$project->fresh()->getAttributes(), $task->fresh()->getAttributes(), $comment->fresh()->getAttributes()];
-    $token = $user->createToken('Read transport client')->plainTextToken;
+    $token = mcpAccessToken($user);
     $name = app($tool)->name();
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
@@ -460,7 +460,7 @@ test('does not disclose unexpected read failures even in debug mode', function (
 test('advertises bounded comment and query schemas', function () {
     $user = User::factory()->create();
     $workspace = Workspace::factory()->withMember($user, WorkspaceRole::Viewer)->create();
-    $token = $user->createToken('Bounded schema client')->plainTextToken;
+    $token = mcpAccessToken($user);
 
     $response = $this->postJson('/mcp/workspaces/'.$workspace->slug, [
         'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list',
